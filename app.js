@@ -1317,7 +1317,7 @@ function viewToddler(kid) {
     <button class="tod-stage" id="peekaboo" aria-label="Play peekaboo"><div class="m" id="heroMonster">${monsterSvg(kid.look, dressedFor(kid), st.level)}</div><svg class="bush" viewBox="0 0 200 60" preserveAspectRatio="none" aria-hidden="true"><path d="M0 60 V34 Q14 8 40 22 Q56 0 82 16 Q102 -2 122 16 Q146 0 162 22 Q186 8 200 34 V60Z" fill="#5CC260"/><path d="M0 60 V44 Q20 26 44 38 Q70 22 96 36 Q122 22 148 38 Q176 26 200 44 V60Z" fill="#4CAF50"/></svg></button>
     <div class="tod-name">${esc(kid.name)} ${streakChip(kid.id)}</div>
     <div class="tod-stars" aria-label="${n} Dojos today">${n ? Array.from({ length: Math.min(n, 10) }, () => `<span>⭐</span>`).join("") + (n > 10 ? `<b>+${n - 10}</b>` : "") : `<span class="none">Let's get a star!</span>`}</div>
-    <div class="tod-btns">${kidsMode() ? "" : bs.map((b) => `<button class="beh tod${b.id === "bonus" ? " bonus" : ""}" data-beh="${esc(b.id)}"><span class="e" aria-hidden="true">${esc(b.icon)}</span><span class="l">${esc(b.label)}</span></button>`).join("")}</div>${adminPlay() || (gameCfg().on && stats(kid.id).level >= 2 && playsLeft(kid)) ? `<button class="btn kid tod-game" data-game="bubbles">🫧 Bubbles!</button><button class="btn kid tod-game" data-game="peek">👋 Peekaboo!</button>` : ""}${isl() ? `<button class="btn kid tod-game" data-islgo="${esc(kid.id)}" data-islas="${esc(kid.id)}" data-islfrom="kid">🏝️ My island</button>` : ""}
+    <div class="tod-btns">${kidsMode() ? "" : bs.map((b) => `<button class="beh tod${b.id === "bonus" ? " bonus" : ""}" data-beh="${esc(b.id)}"><span class="e" aria-hidden="true">${esc(b.icon)}</span><span class="l">${esc(b.label)}</span></button>`).join("")}</div>${adminPlay() || (gameCfg().on && playsLeft(kid)) ? `<button class="btn kid tod-game" data-game="bubbles">🫧 Bubbles!</button><button class="btn kid tod-game" data-game="peek">👋 Peekaboo!</button>` : ""}${isl() ? `<button class="btn kid tod-game" data-islgo="${esc(kid.id)}" data-islas="${esc(kid.id)}" data-islfrom="kid">🏝️ My island</button>` : ""}
     <div class="row" style="justify-content:center;margin-top:12px">${wallet(st, true)}</div></div>`;
 }
 function peekaboo(kid) {
@@ -1390,7 +1390,11 @@ const GAMES = [
 ];
 function gameCfg() { return Object.assign({ on: true, limit: 3 }, S.cfg && S.cfg.games); }
 function todayKey() { const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; }
-function playsLeft(kid) { if (adminPlay()) return Infinity; const g = gameCfg(), p = kid.plays || {}; return g.limit ? Math.max(0, g.limit - (p.d === todayKey() ? p.n || 0 : 0)) : Infinity; }
+// Every game is open. Plays are earned: each Dojo gives one game ticket (plus a few to start), and the daily limit still caps a day.
+const FREE_TICKETS = 3;
+function ticketsOf(kid) { return Math.max(0, stats(kid.id).earned + FREE_TICKETS - ((kid.plays || {}).used || 0)); }
+function todayLeft(kid) { const g = gameCfg(), p = kid.plays || {}; return g.limit ? Math.max(0, g.limit - (p.d === todayKey() ? p.n || 0 : 0)) : Infinity; }
+function playsLeft(kid) { if (adminPlay()) return Infinity; return Math.min(ticketsOf(kid), todayLeft(kid)); }
 function bestOf(kid, id) { return (kid.best || {})[id] || 0; }
 // The admin editor for one child: give or take away anything. Gifts are free; taking back a bought item returns its Dojo $.
 function viewAdminKid(kid, st) {
@@ -1416,7 +1420,7 @@ function adminEdit(kid, act, v) {
   kid = kidById(kid.id) || kid;
   if (act === "give") { const it = SHOP.concat(FURNI, HOUSE, islSpecials()).find((i) => i.id === v); if (it) { addRecord({ kid: kid.id, kind: "buy", item: it.id, label: it.name + " (gift)", icon: "🎁", pts: 0, at: Date.now() }); toast(`${kid.name} now has the ${it.name}.`); } }
   else if (act === "take") { const it = SHOP.concat(FURNI, HOUSE, islSpecials()).find((i) => i.id === v); S.awards.filter((a) => a.kid === kid.id && a.kind === "buy" && a.item === v).forEach((a) => removeRecord(a.id)); if (it) toast(`The ${it.name} was taken away.`); }
-  else if (act === "tries") { const n = kid.plays && kid.plays.d === todayKey() ? kid.plays.n || 0 : 0, d = +v; setMonster(kid, { plays: { d: todayKey(), n: d === 0 ? 0 : Math.max(0, Math.min(gameCfg().limit || 999, n) + d) } }); }
+  else if (act === "tries") { const n = kid.plays && kid.plays.d === todayKey() ? kid.plays.n || 0 : 0, d = +v; setMonster(kid, { plays: Object.assign({}, kid.plays, { d: todayKey(), n: d === 0 ? 0 : Math.max(0, Math.min(gameCfg().limit || 999, n) + d), used: Math.max(0, ((kid.plays || {}).used || 0) + (d === 0 ? 0 : d)) }) }); }
   else if (act === "best") { const b = Object.assign({}, kid.best); delete b[v]; setMonster(kid, { best: b }); }
   else if (act === "eggs") setMonster(kid, { eggs: Math.max(0, (kid.eggs || 0) + +v) });
   else if (act === "dojos" || act === "cash") {
@@ -1429,9 +1433,10 @@ function adminEdit(kid, act, v) {
 }
 function viewGames(kid, st) {
   const g = gameCfg(), left = playsLeft(kid);
-  return `<div class="sect"><h3>🎮 Games</h3><p>${adminPlay() ? "Admin mode: every game is unlocked. These games don't count towards the daily limit or high scores." : !g.limit ? "Play as much as you like." : left ? `${left} of ${g.limit} game${g.limit === 1 ? "" : "s"} left today.` : "No games left today. Come back tomorrow!"} Beat your best score! Games are just for fun and don't give Dojos.</p></div>
+  const tk = ticketsOf(kid), today = todayLeft(kid);
+  return `<div class="sect"><h3>🎮 Games</h3><p>${adminPlay() ? "Admin mode: these games don't use tickets, count towards the daily limit or change high scores." : `<span class="tickets">🎟️ ${tk} game ${tk === 1 ? "ticket" : "tickets"}</span> Every Dojo you earn gives you another one! ${!tk ? "Earn a Dojo to play again." : today === 0 ? "That's all the games for today. Come back tomorrow!" : g.limit ? `${today} more today.` : ""}`} Games are just for fun and don't give Dojos.</p></div>
   <div class="games">${GAMES.map((gm) => {
-    const open = adminPlay() || st.level >= gm.level, need = LEVELS[gm.level - 1] - st.earned, best = bestOf(kid, gm.id);
+    const open = true, need = 0, best = bestOf(kid, gm.id);
     return `<button class="gcard${open ? "" : " locked"}" ${open && left ? `data-game="${gm.id}"` : "disabled"}><span class="gi" aria-hidden="true">${open ? gm.icon : "🔒"}</span><b>${esc(gm.name)}</b><small>${open ? esc(gm.blurb) : `Unlocks at level ${gm.level}: ${need} more Dojo${need === 1 ? "" : "s"}`}</small>${open && best ? `<span class="gbest">🏆 Best ${best}</span>` : ""}</button>`;
   }).join("")}</div>`;
 }
@@ -1440,9 +1445,9 @@ function closeGame() { if (GAME.stop) GAME.stop(); GAME.stop = null; const el = 
 function startGame(kidIn, id) {
   const gm = GAMES.find((g) => g.id === id); if (!gm) return;
   closeGame();
-  if (!playsLeft(kidIn)) return toast("No games left today. Come back tomorrow!");
+  if (!playsLeft(kidIn)) return toast(ticketsOf(kidIn) ? "No more games today. Come back tomorrow!" : "No game tickets left. Earn a Dojo to get another one!");
   const p = kidIn.plays && kidIn.plays.d === todayKey() ? kidIn.plays.n || 0 : 0;
-  if (!adminPlay()) setMonster(kidIn, { plays: { d: todayKey(), n: p + 1 } });
+  if (!adminPlay()) setMonster(kidIn, { plays: { d: todayKey(), n: p + 1, used: ((kidIn.plays || {}).used || 0) + 1 } });
   const kid = kidById(kidIn.id) || kidIn, best = bestOf(kid, id);
   const el = document.createElement("div"); el.className = "game"; el.setAttribute("role", "dialog"); el.setAttribute("aria-label", gm.name);
   el.style.setProperty("--kid", kid.look.color);
@@ -2193,7 +2198,7 @@ function viewSettings() {
 `;
   } else if (S.setPage === "games") {
     body = `
-  <section class="card"><h3 style="font-size:19px">🎮 Games</h3><p class="meta" style="margin:0">Little games that unlock as monsters level up. They never give Dojos.</p>
+  <section class="card"><h3 style="font-size:19px">🎮 Games</h3><p class="meta" style="margin:0">All games are open. Every Dojo earned gives one game ticket (plus ${FREE_TICKETS} to start). Games never give Dojos.</p>
     <label class="row" style="gap:8px;font-weight:700"><input type="checkbox" id="gmOn" ${(d.games || {}).on === false ? "" : "checked"}> Games on</label>
     <label class="field" style="max-width:260px">Games per child per day (0 = no limit)<input id="gmLim" type="number" min="0" max="50" value="${esc((d.games || {}).limit == null ? 3 : d.games.limit)}"></label></section>
   <section class="card"><h3 style="font-size:19px">🛠 Admin mode</h3><p class="meta" style="margin:0">For grown-ups: adds an 🛠 Admin tab to each child where you can give or take away any shop item, pet, house or furniture, mystery egg prizes, today's game tries and high scores. You can also try any game; admin games don't use up the children's games or change their high scores. It stays on until you turn it off or close the app.</p>
