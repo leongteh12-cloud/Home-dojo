@@ -1,0 +1,20 @@
+[
+  {
+    "v": "home-dojo-v30",
+    "date": "17 Oct 2026",
+    "items": [
+      "When an update is ready, the banner now has a \"What's new\" button so you can see the changes before you update."
+    ]
+  },
+  {
+    "v": "home-dojo-v29",
+    "date": "17 Oct 2026",
+    "items": [
+      "A brighter, lighter look with soft pastel colours, the same on every phone.",
+      "Settings is now on the home screen (with the parent PIN), split into short pages: Children, Rewards, Games, Family and This device.",
+      "Inviting someone is easier: the invite is a ready-made message with simple steps, and the link joins them to the family automatically.",
+      "New people get a welcome screen showing how to add the app to their home screen.",
+      "This \"What's new\" screen pops up after each update. Open it again any time from Settings, under This device."
+    ]
+  }
+]

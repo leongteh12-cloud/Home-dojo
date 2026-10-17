@@ -2334,32 +2334,36 @@ function soundIcon() {
   const mb = $("#menuBtn"); if (mb) mb.hidden = S.phase !== "app" || S.view === "menu" || !(S.cfg && (S.cfg.kids || []).length);
   b.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/>${on ? '<path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/>' : '<path d="m22 9-6 6M16 9l6 6"/>'}</svg>`;
 }
-// What's new: newest first. Add an entry with every update; v matches VERSION in sw.js.
-const WHATS_NEW = [
-  { v: "home-dojo-v29", date: "17 Oct 2026", items: [
-    "A brighter, lighter look with soft pastel colours, the same on every phone.",
-    "Settings is now on the home screen (with the parent PIN), split into short pages: Children, Rewards, Games, Family and This device.",
-    "Inviting someone is easier: the invite is a ready-made message with simple steps, and the link joins them to the family automatically.",
-    "New people get a welcome screen showing how to add the app to their home screen.",
-    "This \"What's new\" screen pops up after each update. Open it again any time from Settings, under This device."
-  ] }
-];
+// What's new lives in news.json (newest first). Add an entry with every update; v matches VERSION in sw.js.
+// fresh = skip every cache, to read the notes of an update that's waiting to be installed.
+const loadNews = (fresh) => fetch("news.json" + (fresh ? "?t=" + Date.now() : ""), fresh ? { cache: "no-store" } : {}).then((r) => r.json()).catch(() => []);
 function whatsNewHtml(list) {
   return `<div style="font-size:44px;line-height:1">✨</div><h2>What's new</h2>
     ${list.map((n) => `<div class="news">${list.length > 1 ? `<div class="meta" style="font-weight:700">${esc(n.date)}</div>` : ""}<ul>${n.items.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>`).join("")}
     <button class="btn primary" id="newsOk">Got it!</button>`;
 }
-function showWhatsNew(list) { modal(whatsNewHtml(list), () => { $("#newsOk").onclick = closeModal; }); }
+function showWhatsNew(list) { if (!list.length) return toast("No notes for this version."); modal(whatsNewHtml(list), () => { $("#newsOk").onclick = closeModal; }); }
 // After an update, show what changed since this device last looked. A brand-new install just remembers the version.
-function maybeWhatsNew() {
+async function maybeWhatsNew() {
   if (HOST || S.newsChecked) return;
   S.newsChecked = true;
-  const seen = lget("hd.seenVersion", null), top = WHATS_NEW[0];
+  const news = await loadNews(false), top = news[0];
+  if (!top) return;
+  const seen = lget("hd.seenVersion", null);
   lset("hd.seenVersion", top.v);
   if (!seen || seen === top.v) return;
-  const i = WHATS_NEW.findIndex((n) => n.v === seen);
-  const fresh = WHATS_NEW.slice(0, i < 0 ? 3 : Math.min(i, 3));
+  const i = news.findIndex((n) => n.v === seen);
+  const fresh = news.slice(0, i < 0 ? 3 : Math.min(i, 3));
   if (fresh.length) setTimeout(() => { if (!$("#overlay").innerHTML) showWhatsNew(fresh); }, 600);
+}
+// The update banner's "What's new": the notes of the waiting version, read before installing it.
+async function previewUpdate(w) {
+  const news = await loadNews(true), seen = lget("hd.seenVersion", null);
+  const i = news.findIndex((n) => n.v === seen), list = news.slice(0, i < 0 ? 1 : Math.min(Math.max(i, 1), 3));
+  modal(whatsNewHtml(list).replace('<button class="btn primary" id="newsOk">Got it!</button>', '<div class="row" style="justify-content:center"><button class="btn ghost" id="newsLater">Later</button><button class="btn primary" id="newsUpd">Update now</button></div>'), () => {
+    $("#newsLater").onclick = closeModal;
+    $("#newsUpd").onclick = () => { if (news[0]) lset("hd.seenVersion", news[0].v); w.postMessage("skipWaiting"); };
+  });
 }
 
 function render() {
@@ -2527,7 +2531,7 @@ function wireSettings() {
   v.querySelectorAll("[data-invite]").forEach((b) => b.onclick = () => createInvite(b.dataset.invite));
   v.querySelectorAll("[data-rmmember]").forEach((b) => b.onclick = () => removeMember(S.members.find((m) => m.user_id === b.dataset.rmmember)));
   on("#bkDown", downloadBackup);
-  on("#newsBtn", () => showWhatsNew(WHATS_NEW.slice(0, 3)));
+  on("#newsBtn", async () => showWhatsNew((await loadNews(false)).slice(0, 3)));
   on("#bkUp", pickBackupFile);
   const md = $("#muteDev"); if (md) md.onchange = () => { lset("hd.mute", md.checked); soundIcon(); };
   on("#signOutBtn", () => confirmBox("Sign out?", "You'll need your email and password to sign back in on this device.", "Sign out", () => sb.auth.signOut()));
@@ -2608,7 +2612,8 @@ function registerSW() {
   if (HOST || !("serviceWorker" in navigator) || location.protocol === "file:") return;
   navigator.serviceWorker.register("sw.js").then((reg) => {
     const offer = (w) => {
-      $("#updateHost").innerHTML = `<div class="banner" role="status"><span>A new version of Home Dojo is ready.</span><button id="updGo">Update</button></div>`;
+      $("#updateHost").innerHTML = `<div class="banner" role="status"><span>✨ A new version of Home Dojo is ready.</span><button id="updNews" class="ghostb">What's new</button><button id="updGo">Update</button></div>`;
+      $("#updNews").onclick = () => previewUpdate(w);
       $("#updGo").onclick = () => { w.postMessage("skipWaiting"); };
     };
     if (reg.waiting && navigator.serviceWorker.controller) offer(reg.waiting);

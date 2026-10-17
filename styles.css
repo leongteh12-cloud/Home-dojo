@@ -641,3 +641,5 @@ h2 .streak { font-size: 13px; margin-left: 4px; }
 .invitebox { text-align: left; gap: 8px; }
 .invitebox ol, .welcome-list { margin: 0; padding-left: 22px; display: grid; gap: 6px; text-align: left; }
 .invmsg { text-align: left; background: var(--surface-2); border-radius: 14px; padding: 12px; font-size: 14px; line-height: 1.45; word-break: break-word; user-select: text; -webkit-user-select: text; }
+.banner .ghostb { background: rgba(255,255,255,.18); color: #fff; border: 1px solid rgba(255,255,255,.5); }
+.banner { flex-wrap: wrap; }
