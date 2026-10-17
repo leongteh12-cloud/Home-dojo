@@ -1,4 +1,4 @@
-import re,sys
+import re,sys,os,base64,json
 A='/mnt/project-files/home-dojo-app/'
 idx=open(A+'index.html').read()
 css=open(A+'styles.css').read()
@@ -24,7 +24,9 @@ head='''<meta name="description" content="Family points for good behaviour, with
 </style>'''
 idx=re.sub(r'<meta name="description"[\s\S]*?<link rel="stylesheet" href="styles.css">', lambda m: head, idx)
 idx=idx.replace('<title>Home Dojo</title>','<title>Home Dojo Monsters</title>')
-scripts='<script>\n'+host+'\n</script>\n<script>\n'+open(A+'monsters.js').read()+'\n</script>\n<script>\n'+open(A+'guide.js').read()+'\n</script>\n<script>\n'+open(A+'voice.js').read()+'\n</script>\n<script>\n'+open(A+'islands.js').read()+'\n</script>\n<script>\n'+open(A+'app.js').read()+'\n</script>'
+# Scenery pictures go inline as data URIs, since the artifact can't load files next to it.
+sc={f[:-5]:'data:image/webp;base64,'+base64.b64encode(open(A+'scenery/'+f,'rb').read()).decode() for f in sorted(os.listdir(A+'scenery')) if f.endswith('.webp')}
+scripts='<script>\n'+host+'\nwindow.HD_SCENERY = '+json.dumps(sc)+';\n</script>\n<script>\n'+open(A+'monsters.js').read()+'\n</script>\n<script>\n'+open(A+'guide.js').read()+'\n</script>\n<script>\n'+open(A+'voice.js').read()+'\n</script>\n<script>\n'+open(A+'islands.js').read()+'\n</script>\n<script>\n'+open(A+'app.js').read()+'\n</script>'
 idx=re.sub(r'<script src="config.js"></script>[\s\S]*?<script src="app.js"></script>', lambda m: scripts, idx)
 assert 'src="' not in idx.split('<body>')[1] or True
 open(sys.argv[1],'w').write(idx)
