@@ -1,6 +1,6 @@
 // Home Dojo service worker: keeps the app working offline and picks up new versions.
 // Bump VERSION whenever any app file changes.
-const VERSION = "home-dojo-v36";
+const VERSION = "home-dojo-v37";
 const SHELL = [
   "./", "index.html", "styles.css", "app.js", "monsters.js", "guide.js", "voice.js", "islands.js", "config.js", "news.json", "manifest.webmanifest",
   "vendor/supabase.js", "icons/icon.svg", "icons/icon-192.png", "icons/apple-touch-icon.png",

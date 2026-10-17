@@ -764,23 +764,27 @@ function lobbyActors(solo) {
 }
 function viewLobby(solo) {
   const kids = solo ? [solo] : S.cfg.kids || [], n = kids.length, slot = 400 / Math.max(n, 1), hw = solo ? 150 : Math.min(140, slot * 0.82);
+  // A picture backdrop pushes the houses back to its fence line, so the lawn starts lower.
+  const bg = solo ? backdropFor(sceneOf(solo)) : kids.length && kids.every((k) => sceneOf(k).theme === "gdn") ? "" : backdropFor({ theme: "adv", bg: "auto" });
+  const hz = bg ? 210 : 158; LAWN.y0 = bg ? 222 : 188;
+  const sunny = !bg || (bg.startsWith("yard-") && bg !== "yard-night" && bg !== "yard-midautumn");
   let s = `<svg viewBox="0 0 400 300" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="lbSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8FD3FF"/><stop offset="1" stop-color="#E4F6FF"/></linearGradient></defs>
-    <rect width="400" height="300" fill="url(#lbSky)"/><g data-egg="sun" style="cursor:pointer"><circle cx="352" cy="40" r="30" fill="#FFE98A" opacity=".5"/><circle cx="352" cy="40" r="20" fill="#FFD43B"/></g>
-    ${[[40, 42, 1], [210, 26, .8], [300, 70, .7]].map(([x, y, k], i) => `<g class="cloud" data-egg="cloud" style="animation-delay:${-i * 13}s;cursor:pointer"><g transform="translate(${x} ${y}) scale(${k})"><ellipse cx="0" cy="0" rx="26" ry="12" fill="#fff"/><ellipse cx="18" cy="-6" rx="16" ry="12" fill="#fff"/><ellipse cx="-14" cy="-4" rx="12" ry="9" fill="#fff"/></g></g>`).join("")}
-    <path d="M0 132 Q60 98 130 124 Q200 92 270 120 Q340 96 400 122 V160 H0Z" fill="#A9DC8A"/>
+    <rect width="400" height="300" fill="url(#lbSky)"/>${bg ? `<image href="${sceneUrl(bg)}" x="0" y="-30" width="400" height="330" preserveAspectRatio="xMidYMid slice"/>` : ""}${sunny ? `<g data-egg="sun" style="cursor:pointer"><circle cx="352" cy="40" r="30" fill="#FFE98A" opacity=".5"/><circle cx="352" cy="40" r="20" fill="#FFD43B"/></g>
+    ${[[40, 42, 1], [210, 26, .8], [300, 70, .7]].map(([x, y, k], i) => `<g class="cloud" data-egg="cloud" style="animation-delay:${-i * 13}s;cursor:pointer"><g transform="translate(${x} ${y}) scale(${k})"><ellipse cx="0" cy="0" rx="26" ry="12" fill="#fff"/><ellipse cx="18" cy="-6" rx="16" ry="12" fill="#fff"/><ellipse cx="-14" cy="-4" rx="12" ry="9" fill="#fff"/></g></g>`).join("")}` : ""}
+    ${bg ? "" : `<path d="M0 132 Q60 98 130 124 Q200 92 270 120 Q340 96 400 122 V160 H0Z" fill="#A9DC8A"/>
     <path d="M0 150 H400 V300 H0Z" fill="#7CC95A"/>
     ${Array.from({ length: 8 }, (_, i) => `<rect x="0" y="${168 + i * 17}" width="400" height="8.5" fill="#8BD46A" opacity=".55"/>`).join("")}
-    <g stroke="#E9D6B4" stroke-width="3">${Array.from({ length: 21 }, (_, i) => `<path d="M${i * 20 + 4} 152 V136"/>`).join("")}<path d="M0 141 H400 M0 148 H400"/></g>`;
+    <g stroke="#E9D6B4" stroke-width="3">${Array.from({ length: 21 }, (_, i) => `<path d="M${i * 20 + 4} 152 V136"/>`).join("")}<path d="M0 141 H400 M0 148 H400"/></g>`}`;
   kids.forEach((k, i) => {
-    const st = stats(k.id), cx = slot * (i + 0.5), sc = hw / 120;
-    s += `<path d="M${cx - 8} 158 L${cx - 16} 300 H${cx + 16} L${cx + 8} 158Z" fill="#E8D3A8" opacity=".75"/><g data-visit="${esc(k.id)}" style="cursor:pointer">
-      <g transform="translate(${cx - hw / 2} ${158 - 110 * sc}) scale(${sc})">${houseOutsideSvg(houseTier(st.owned), k.look.color)}</g>
-      <g transform="translate(${cx + hw / 2 - 8} 146)"><rect x="-2" y="0" width="4" height="16" fill="#8D6E63"/><rect x="-22" y="-12" width="44" height="15" rx="4" fill="#FFF8E7" stroke="#8D6E63" stroke-width="2"/><text x="0" y="-1.5" text-anchor="middle" font-family="Fredoka, sans-serif" font-weight="600" font-size="10" fill="#5B4636">${esc(k.name.slice(0, 8))}</text></g></g>`;
+    const st = stats(k.id), cx = slot * (i + 0.5), iw = hw * 0.8, ih = iw * 1.12;
+    s += `<path d="M${cx - 8} ${hz} L${cx - 16} 300 H${cx + 16} L${cx + 8} ${hz}Z" fill="#E8D3A8" opacity="${bg ? .5 : .75}"/><g data-visit="${esc(k.id)}" style="cursor:pointer">
+      <image href="${sceneUrl(houseArt(k, houseTier(st.owned)))}" x="${cx - iw / 2}" y="${hz + 6 - ih}" width="${iw}" height="${ih}" preserveAspectRatio="xMidYMax meet"/>
+      <g transform="translate(${cx + hw / 2 - 8} ${hz - 12})"><rect x="-2" y="0" width="4" height="16" fill="#8D6E63"/><rect x="-22" y="-12" width="44" height="15" rx="4" fill="#FFF8E7" stroke="#8D6E63" stroke-width="2"/><text x="0" y="-1.5" text-anchor="middle" font-family="Fredoka, sans-serif" font-weight="600" font-size="10" fill="#5B4636">${esc(k.name.slice(0, 8))}</text></g></g>`;
   });
-  if (solo) s += yardSvg(solo);
-  const fl = solo ? [[30, 200], [120, 292], [338, 280], [70, 262], [200, 276]] : [[30, 200], [372, 214], [120, 292], [260, 196], [338, 280], [70, 262], [200, 276]];
-  // Decorations sit on top of the sky but must never block taps on the sun, clouds or houses.
-  s += `<g pointer-events="none">${seasonDecor(seasonNow(), kids, kids.some((k) => isBirthday(k))) + birthdayDecor(kids, slot)}</g>`;
+  if (solo) s += `<g transform="translate(0 ${hz - 158})">${yardSvg(solo)}</g>`;
+  const fl = (solo ? [[30, 200], [120, 292], [338, 280], [70, 262], [200, 276]] : [[30, 200], [372, 214], [120, 292], [260, 196], [338, 280], [70, 262], [200, 276]]).filter(([, y]) => !bg || y > 255);
+  // Decorations sit on top of the sky but must never block taps on the sun, clouds or houses. Picture backdrops bring their own.
+  s += `<g pointer-events="none">${(bg ? "" : seasonDecor(seasonNow(), kids, kids.some((k) => isBirthday(k)))) + birthdayDecor(kids, slot)}</g>`;
   s += fl.map(([x, y], i) => `<g data-egg="flower" style="cursor:pointer" transform="translate(${x} ${y})"><path d="M0 0 V-8" stroke="#3E8E41" stroke-width="2"/>${[0, 72, 144, 216, 288].map((a) => `<circle cx="${Math.cos(a * Math.PI / 180) * 3.5}" cy="${-10 + Math.sin(a * Math.PI / 180) * 3.5}" r="3" fill="${["#FF5E8A", "#FFD43B", "#fff", "#C77DFF"][i % 4]}"/>`).join("")}<circle cy="-10" r="2.2" fill="#FFB400"/></g>`).join("");
   s += `</svg>`;
   if (solo) return `<section class="lobby yard${LOBBY.night ? " night" : ""} season-${seasonNow() || "none"}" id="lobby" data-solo="${esc(solo.id)}" aria-label="${esc(solo.name)}'s yard">${s}<div class="nightsky" aria-hidden="true"><span class="moon"></span></div><div class="lobby-layer" id="lobbyLayer"></div></section>
@@ -800,6 +804,7 @@ function mountLobby() {
     const label = a.type === "monster" ? (a.kid.monsterName || a.kid.name) + (sk >= 2 ? ` 🔥${sk}` : "") : "";
     return `<button class="walker ${a.type}" data-w="${esc(a.id)}" style="--kid:${esc(a.kid.look.color)}" aria-label="${esc(a.type === "monster" ? "Play with " + (a.kid.monsterName || a.kid.name + "'s monster") : "Pat the " + a.pet)}"><span class="shadow"></span><span class="act"><span class="face"><span class="bob">${art}</span></span></span>${label ? `<span class="tag">${esc(label)}</span>` : ""}</button>`;
   }).join("");
+  Object.values(LOBBY.st).forEach((st) => { st.y = Math.max(LAWN.y0, st.y); st.ty = Math.max(LAWN.y0, st.ty || 0); });
   actors.forEach((a, i) => {
     if (!LOBBY.st[a.id]) {
       const x = a.type === "pet" && LOBBY.st["k:" + a.kid.id] ? LOBBY.st["k:" + a.kid.id].x + rnd(-30, 30) : 60 + (i * 97) % 280;
@@ -2077,7 +2082,7 @@ function viewKid(kid, tab) {
           const status = i === tier ? `<span class="pill ready">Your house</span>`
             : i < tier ? `<span class="pill given">Lived here ✓</span>`
             : `<button class="btn small kid" data-house="${h.id}" ${st.balance < h.cost ? "disabled" : ""}>${coin(h.cost)}</button>`;
-          return `<div class="item${i === tier ? " on" : ""}">${i > tier ? tierChip(h.cost) : ""}<button class="m house-out" data-peek="${i}" aria-label="Look inside the ${esc(h.name)}"><svg viewBox="-12 -8 144 126" aria-hidden="true"><rect x="-12" y="-8" width="144" height="126" fill="#BDE6FF"/><rect x="-12" y="104" width="144" height="14" fill="#7CC95A"/>${houseOutsideSvg(i, kid.look.color)}</svg></button><div class="n">${esc(h.name)}</div>${i > tier && st.balance < h.cost ? `<div class="meta">${h.cost - st.balance} more Dojo $</div>` : ""}${status}</div>`;
+          return `<div class="item${i === tier ? " on" : ""}">${i > tier ? tierChip(h.cost) : ""}<button class="m house-out" data-peek="${i}" aria-label="Look inside the ${esc(h.name)}"><svg viewBox="-12 -8 144 126" aria-hidden="true"><rect x="-12" y="-8" width="144" height="126" fill="#BDE6FF"/><rect x="-12" y="104" width="144" height="14" fill="#7CC95A"/><image href="${sceneUrl(houseArt(kid, i))}" x="0" y="-4" width="120" height="114" preserveAspectRatio="xMidYMax meet"/></svg></button><div class="n">${esc(h.name)}</div>${i > tier && st.balance < h.cost ? `<div class="meta">${h.cost - st.balance} more Dojo $</div>` : ""}${status}</div>`;
         }).join("") + `</div><div class="sect"><h3>🛋️ Furniture</h3><p>For the ${esc(HOUSE[tier].name.toLowerCase())}</p></div><div class="grid">` +
         FURNI.slice().sort((a, b) => a.cost - b.cost).map((f) => { const has = owned.has(f.id);
           return `<div class="item${has ? " on" : ""}">${has ? "" : tierChip(f.cost)}<div class="m furni-big">${furniCloseup(f.id, tier)}</div><div class="n">${esc(f.name)}</div>${has ? `<span class="pill given">In the house ✓</span>` : `<button class="btn small kid" data-furni="${f.id}" ${st.balance < f.cost ? "disabled" : ""}>${coin(f.cost)}</button>`}</div>`; }).join("") + `</div>`;
@@ -2312,6 +2317,41 @@ const seedIcon = (t) => (SEEDS.find((x) => x[0] === t) || SEEDS[0])[1];
 const mudOf = (kid) => { const b = yardOf(kid).bath; return b ? Math.min(3, Math.floor((Date.now() - b) / (2 * 864e5))) : 1; };
 function saveYard(kid, patch) { setMonster(kid, { yard: Object.assign({}, yardOf(kid), patch) }); }
 
+/* ---------- scenery pictures ---------- */
+// Made with an image generator; the monsters, pets and clothes stay drawn so they can still move and change.
+// Each child picks a theme (their house and picture places) and a backdrop for their own yard.
+const SCENE_THEMES = [["adv", "⚔️", "Adventure"], ["gdn", "🌸", "Garden"]];
+const SCENE_YARDS = [["auto", "Follow the seasons"], ["drawn", "Storybook garden"], ["everyday", "Sunny day"], ["spring", "Spring"], ["summer", "Summer"], ["autumn", "Autumn"], ["winter", "Winter"], ["night", "Night"],
+  ["lunar", "Lunar New Year"], ["hariraya", "Hari Raya"], ["easter", "Easter"], ["deepavali", "Deepavali"], ["midautumn", "Mid-Autumn"], ["halloween", "Halloween"], ["christmas", "Christmas"]];
+const SCENE_PLACES = [["space", "Space"], ["sea", "Under the sea"], ["jungle", "Jungle"], ["snow", "Snowy mountain"], ["beach", "Beach sunset"], ["rainbow", "Rainbow land"], ["candy", "Candy land"], ["bedroom", "Cosy bedroom"]];
+const SCENE_HOLIDAYS = ["lunar", "hariraya", "easter", "deepavali", "midautumn", "halloween", "christmas"];
+const sceneUrl = (name) => (window.HD_SCENERY && window.HD_SCENERY[name]) || `scenery/${name}.webp`;
+const sceneOf = (kid) => Object.assign({ theme: "adv", bg: "auto" }, (kid && yardOf(kid).scene) || {});
+const houseArt = (kid, tier) => `${sceneOf(kid).theme}-house-${tier}`;
+// The picture behind a yard, or "" for the drawn garden. Garden theme on "follow the seasons" keeps the drawn garden and its seasonal decorations.
+function backdropFor(sc) {
+  const bg = sc.bg || "auto";
+  if (bg === "drawn" || (bg === "auto" && sc.theme === "gdn")) return "";
+  if (bg !== "auto") return SCENE_PLACES.some((p) => p[0] === bg) ? `${sc.theme}-scene-${bg}` : `yard-${bg}`;
+  const h = seasonNow(); return `yard-${SCENE_HOLIDAYS.includes(h) ? h : ausSeason()}`;
+}
+function pickScenery(kid) {
+  kid = kidById(kid.id) || kid;
+  const sc = sceneOf(kid);
+  const tile = (bg, label) => { const art = backdropFor({ theme: sc.theme, bg }); return `<button class="scn${sc.bg === bg ? " on" : ""}" data-bg="${bg}" aria-pressed="${sc.bg === bg}">${art ? `<img src="${sceneUrl(art)}" alt="" loading="lazy">` : `<span class="scn-drawn" aria-hidden="true">🌼</span>`}<small>${esc(label)}</small></button>`; };
+  modal(`<div style="font-size:40px;line-height:1">🎨</div><h2>${esc(kid.name)}'s scenery</h2>
+    <div class="seg scn-theme">${SCENE_THEMES.map(([id, ic, l]) => `<button data-theme="${id}" class="${sc.theme === id ? "on" : ""}" aria-pressed="${sc.theme === id}">${ic} ${l}</button>`).join("")}</div>
+    <p class="meta">The theme changes your house and your picture places.</p>
+    <h3>Yard</h3><div class="scn-grid">${SCENE_YARDS.map(([id, l]) => tile(id, l)).join("")}</div>
+    <h3>Places</h3><div class="scn-grid">${SCENE_PLACES.map(([id, l]) => tile(id, l)).join("")}</div>
+    <button class="btn primary" id="scnOk">Done</button>`, (ov) => {
+    $("#scnOk").onclick = closeModal;
+    const save = (patch) => { saveYard(kid, { scene: Object.assign({}, sc, patch) }); beep([[659, .08, 0, "pluck"], [880, .12, .1, "pluck"]], .35); pickScenery(kid); };
+    ov.querySelectorAll("[data-theme]").forEach((b) => b.onclick = () => save({ theme: b.dataset.theme }));
+    ov.querySelectorAll("[data-bg]").forEach((b) => b.onclick = () => save({ bg: b.dataset.bg }));
+  });
+}
+
 function yardSvg(kid) {
   const unread = unreadOf(kid), earned = stats(kid.id).earned, garden = (yardOf(kid).garden || []).slice(-4);
   let s = `<g data-yard="mail" style="cursor:pointer" transform="translate(92 160)"><rect x="-2" y="-16" width="5" height="22" fill="#8D6E63"/>
@@ -2333,7 +2373,7 @@ function yardSvg(kid) {
 function yardBar(kid) {
   const unread = unreadOf(kid);
   const b = (id, ic, l, extra) => `<button data-yard="${id}"><span class="yi" aria-hidden="true">${ic}</span><span>${l}</span>${extra || ""}</button>`;
-  return `<div class="yardbar">${b("mail", "📬", "Mail", unread ? `<i class="ybadge">${unread}</i>` : "")}${b("garden", "🌱", "Garden")}${b("ball", "⚽", "Ball")}${b("snack", "🍎", "Snack")}${b("bath", "🛁", "Bath")}${kidsMode() ? "" : b("write", "✉️", "Write")}</div>
+  return `<div class="yardbar">${b("mail", "📬", "Mail", unread ? `<i class="ybadge">${unread}</i>` : "")}${b("garden", "🌱", "Garden")}${b("ball", "⚽", "Ball")}${b("snack", "🍎", "Snack")}${b("bath", "🛁", "Bath")}${b("scene", "🎨", "Scenery")}${kidsMode() ? "" : b("write", "✉️", "Write")}</div>
     <p class="meta lobby-hint">Tap your monster to play, or tap the grass to walk there. Tap the house to go inside.</p>`;
 }
 function mountYard(kid) {
@@ -2349,6 +2389,7 @@ function yardDo(kid, what) {
   if (what === "ball") return throwThing(kid, "ball");
   if (what === "snack") return throwThing(kid, "snack");
   if (what === "bath") return bathTime(kid);
+  if (what === "scene") return pickScenery(kid);
 }
 const yardMonster = (kid) => LOBBY.st["k:" + kid.id];
 function sayBubble(st, text, who) {
