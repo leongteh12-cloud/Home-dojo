@@ -3,7 +3,7 @@
 (function () {
 "use strict";
 
-const { star, LIB, BONUS, SHOP, SLOTS, LEVELS, COLORS, SHAPES, TOPS, SPECIES, MOUTHS, EYESTYLES, BROWS, NOSES, CHEEKS, ARMS, BELLIES, LOOK_DEFAULTS, monsterSvg, shade, trophySvg, medalSvg, badgeSvg, HOUSE, FURNI, houseTier, houseSvg, houseOutsideSvg, petSvg, PET_IDS, PRICE_TIERS, priceTier, furniCloseup } = window.HD;
+const { shopArt, star, LIB, BONUS, SHOP, SLOTS, LEVELS, COLORS, SHAPES, TOPS, SPECIES, MOUTHS, EYESTYLES, BROWS, NOSES, CHEEKS, ARMS, BELLIES, LOOK_DEFAULTS, monsterSvg, shade, trophySvg, medalSvg, badgeSvg, HOUSE, FURNI, houseTier, houseSvg, houseOutsideSvg, petSvg, PET_IDS, PRICE_TIERS, priceTier, furniCloseup } = window.HD;
 const pendingCfg = () => S.outbox.some((o) => o.op === "saveConfig" || o.op === "equip" || o.op === "monster" || o.op === "family");
 const CONF = window.HOME_DOJO_CONFIG || {};
 // A host page (such as the claude.ai version) can supply its own storage: { start, saveCfg, add, remove }.
@@ -2073,7 +2073,7 @@ function viewKid(kid, tab) {
       const prev = Object.assign({}, eq, { [slot]: i.id });
       const action = has ? `<button class="btn small ${on ? "ghost" : "kid"}" data-wear="${i.id}">${on ? "Take off" : "Wear"}</button>`
         : `<button class="btn small kid" data-buy="${i.id}" ${st.balance < i.cost ? "disabled" : ""}>${coin(i.cost)}</button>`;
-      return `<div class="item${on ? " on" : ""}">${has ? "" : tierChip(i.cost)}<div class="m${slot === "pet" ? " pet-big" : ""}">${slot === "pet" ? `<svg viewBox="-32 -30 64 62" aria-hidden="true"><ellipse cx="0" cy="26" rx="22" ry="4" fill="rgba(0,0,0,.12)"/>${petSvg(i.id)}</svg>` : monsterSvg(kid.look, prev, st.level)}</div><div class="n">${esc(i.name)}</div>${action}</div>`;
+      return `<div class="item${on ? " on" : ""}">${has ? "" : tierChip(i.cost)}<div class="m${slot === "pet" ? " pet-big" : ""}">${slot === "pet" ? `<svg viewBox="-32 -30 64 62" aria-hidden="true"><ellipse cx="0" cy="26" rx="22" ry="4" fill="rgba(0,0,0,.12)"/>${petSvg(i.id)}</svg>` : has ? monsterSvg(kid.look, prev, st.level) : `<img class="shop-pic" src="${shopArt(i.id)}" alt="">`}</div><div class="n">${esc(i.name)}</div>${action}</div>`;
     }).join("")}</div>`).join("") +
     (() => {
       const tier = houseTier(owned);
