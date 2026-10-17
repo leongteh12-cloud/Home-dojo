@@ -2306,12 +2306,27 @@ function viewSettings() {
 // Mailbox (notes from grown-ups, read aloud), a garden every Dojo waters, a ball to fetch, snacks and a bubble bath.
 // Notes are award records (kind "note"; label = the words, item = an optional recorded voice). Everything else lives in kid.yard.
 const SEEDS = [["sunflower", "🌻"], ["tulip", "🌷"], ["strawberry", "🍓"], ["tree", "🌳"], ["rose", "🌹"], ["cactus", "🌵"], ["apple", "🍎"], ["mushroom", "🍄"]];
-const GARDEN_STEP = 2;   // Dojos per growth stage; a seed blooms after 4 stages
+const GARDEN_STEP = 1;   // Dojos per growth stage: the plant grows a little with every Dojo
+const BLOOM = 6;         // stages until it blooms
 const SNACKS = ["🍎", "🍌", "🍓", "🥕", "🍪", "🧁", "🍉", "🥦"];
 const yardOf = (kid) => kid.yard || {};
 const notesOf = (kid) => S.awards.filter((a) => a.kid === kid.id && a.kind === "note").slice().reverse();
 const unreadOf = (kid) => notesOf(kid).filter((n) => n.at > (yardOf(kid).seen || 0)).length;
-const plantStage = (p, earned) => Math.max(0, Math.min(4, Math.floor((earned - p.e) / GARDEN_STEP)));
+const plantStage = (p, earned) => Math.max(0, Math.min(BLOOM, Math.floor((earned - p.e) / GARDEN_STEP)));
+// One plant in the yard: a seed with a little sign showing what it is, then a stem and leaves that get taller every Dojo, with the flower or fruit growing on top.
+function plantSvg(p, st, x, y) {
+  const ic = seedIcon(p.t), bloom = st >= BLOOM;
+  let s = "";
+  if (st < 3) s += `<g transform="translate(${x + 8} ${y - 1})"><rect x="-.8" y="-12" width="1.6" height="12" fill="#8D6E63"/><rect x="-6" y="-19" width="12" height="9" rx="2" fill="#FFF8E7" stroke="#8D6E63" stroke-width="1"/><text x="0" y="-12" text-anchor="middle" font-size="7">${ic}</text></g>`;
+  if (st === 0) return s + `<ellipse cx="${x}" cy="${y - 1.5}" rx="4" ry="2.4" fill="#6B4423"/><ellipse cx="${x}" cy="${y - 2.4}" rx="1.6" ry="1.1" fill="#C9A26B"/>`;
+  const h = bloom ? 22 : 3 + st * 3.4, lf = 2 + Math.min(st, 5) * 0.7;
+  s += `<path d="M${x} ${y} Q${x - 1.5} ${y - h / 2} ${x} ${y - h}" stroke="#3E8E41" stroke-width="${1.2 + st * .15}" fill="none" stroke-linecap="round"/>`;
+  for (let i = 0; i < Math.min(3, Math.ceil(st / 2)); i++) { const ly = y - 2 - i * (h / 3.2), d = i % 2 ? 1 : -1; s += `<ellipse cx="${x + d * lf}" cy="${ly}" rx="${lf}" ry="${lf * .5}" fill="#5CC260" transform="rotate(${d * 28} ${x + d * lf} ${ly})"/>`; }
+  const fs = bloom ? 17 : 4 + st * 1.8;
+  s += `<text x="${x}" y="${y - h + fs * .35}" text-anchor="middle" font-size="${fs}"${bloom ? "" : ` opacity="${.55 + st * .07}"`}>${ic}</text>`;
+  if (bloom) s += `<g class="sparkle"><circle cx="${x - 9}" cy="${y - h - 6}" r="1.4" fill="#FFD43B"/><circle cx="${x + 9}" cy="${y - h - 2}" r="1.1" fill="#fff"/></g>`;
+  return s;
+}
 const seedIcon = (t) => (SEEDS.find((x) => x[0] === t) || SEEDS[0])[1];
 // Mud builds up a little every couple of days since the last bath (and starts a bit muddy, to invite the first one).
 const mudOf = (kid) => { const b = yardOf(kid).bath; return b ? Math.min(3, Math.floor((Date.now() - b) / (2 * 864e5))) : 1; };
@@ -2358,15 +2373,12 @@ function yardSvg(kid) {
     <path d="M-14 -16 V-32 Q-14 -40 -4 -40 H6 Q16 -40 16 -32 V-16Z" fill="#3D7BFF" stroke="#1E4FC2" stroke-width="2"/><rect x="-12" y="-27" width="10" height="2" fill="#1E4FC2"/>
     <g transform="translate(16 -30) rotate(${unread ? 0 : 80})"><rect x="0" y="-1.5" width="2.5" height="12" fill="#5B4636"/><rect x="0" y="-1.5" width="10" height="6" fill="#FF4D4D"/></g>
     ${unread ? `<g class="mailglow"><circle cx="1" cy="-50" r="8" fill="#FF4D4D"/><text x="1" y="-46.5" text-anchor="middle" font-family="Fredoka, sans-serif" font-weight="700" font-size="10" fill="#fff">${unread}</text></g>` : ""}</g>`;
-  s += `<g data-yard="garden" style="cursor:pointer">`;
+  // a little raised garden bed with four plots
+  s += `<g data-yard="garden" style="cursor:pointer" transform="translate(330 176) scale(1.45) translate(-330 -176)"><rect x="286" y="172" width="88" height="11" rx="3" fill="#8B5E3C" stroke="#5B3A1E" stroke-width="1.2"/><rect x="288" y="170" width="84" height="5" rx="2.5" fill="#6B4423"/>`;
   for (let i = 0; i < 4; i++) {
-    const x = 300 + i * 24, y = 176, p = garden[i];
-    s += `<ellipse cx="${x}" cy="${y}" rx="10" ry="4" fill="#8B5E3C"/>`;
-    if (!p) { s += `<text x="${x}" y="${y + 1}" text-anchor="middle" font-size="5" fill="#E9D6B4">+</text>`; continue; }
-    const st = plantStage(p, earned);
-    if (st === 0) s += `<ellipse cx="${x}" cy="${y - 1}" rx="2" ry="1.4" fill="#5B3A1E"/>`;
-    else if (st < 4) { const h = 4 + st * 4; s += `<path d="M${x} ${y} V${y - h}" stroke="#3E8E41" stroke-width="1.6"/><ellipse cx="${x - 3}" cy="${y - h + 2}" rx="3" ry="1.6" fill="#5CC260" transform="rotate(-25 ${x - 3} ${y - h + 2})"/><ellipse cx="${x + 3}" cy="${y - h + 3}" rx="3" ry="1.6" fill="#5CC260" transform="rotate(25 ${x + 3} ${y - h + 3})"/>${st === 3 ? `<circle cx="${x}" cy="${y - h - 1}" r="2.4" fill="#FF9EC4"/>` : ""}`; }
-    else s += `<path d="M${x} ${y} V${y - 10}" stroke="#3E8E41" stroke-width="1.6"/><text x="${x}" y="${y - 7}" text-anchor="middle" font-size="15">${seedIcon(p.t)}</text>`;
+    const x = 297 + i * 22, y = 172, p = garden[i];
+    if (!p) { s += `<text x="${x}" y="${y - 1}" text-anchor="middle" font-family="Fredoka, sans-serif" font-weight="700" font-size="8" fill="#E9D6B4">+</text>`; continue; }
+    s += plantSvg(p, plantStage(p, earned), x, y);
   }
   return s + `</g>`;
 }
@@ -2466,9 +2478,9 @@ function bathTime(kid) {
 
 // Garden: plant a seed, then every Dojo the child earns waters it. One grows at a time.
 function openGarden(kid) {
-  const earned = stats(kid.id).earned, garden = yardOf(kid).garden || [], growing = garden.find((p) => plantStage(p, earned) < 4);
-  const plots = garden.slice(-8).map((p) => { const st = plantStage(p, earned); return `<div class="gplot"><span class="gp">${st >= 4 ? seedIcon(p.t) : ["🟤", "🌱", "🌿", "🪴"][st]}</span><small>${st >= 4 ? "Bloomed!" : "Growing"}</small></div>`; }).join("");
-  const left = growing ? (growing.e + GARDEN_STEP * 4) - earned : 0;
+  const earned = stats(kid.id).earned, garden = yardOf(kid).garden || [], growing = garden.find((p) => plantStage(p, earned) < BLOOM);
+  const plots = garden.slice(-8).map((p) => { const st = plantStage(p, earned), done = st >= BLOOM; return `<div class="gplot"><span class="gp" style="font-size:${done ? 34 : 14 + st * 3}px">${st === 0 ? "🌰" : seedIcon(p.t)}</span><small>${done ? "Bloomed!" : st === 0 ? `${seedIcon(p.t)} seed` : `Growing ${st}/${BLOOM}`}</small>${done ? "" : `<i class="gbar"><b style="width:${Math.round(100 * st / BLOOM)}%"></b></i>`}</div>`; }).join("");
+  const left = growing ? (growing.e + GARDEN_STEP * BLOOM) - earned : 0;
   modal(`<div style="font-size:44px;line-height:1">🌱</div><h2>${esc(kid.name)}'s garden</h2>
     ${plots ? `<div class="gplots">${plots}</div>` : `<p class="meta">Nothing planted yet.</p>`}
     ${growing ? `<p>Your ${seedIcon(growing.t)} needs <b>${left} more ${left === 1 ? "Dojo" : "Dojos"}</b> to bloom. Every Dojo you earn waters it! 💧</p><button class="btn primary" id="gOk">OK</button>`

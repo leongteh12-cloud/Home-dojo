@@ -710,3 +710,8 @@ textarea.inp { min-height: 80px; resize: vertical; font: inherit; }
 .scn img, .scn .scn-drawn { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: grid; place-items: center; font-size: 30px; background: linear-gradient(#BDE6FF 55%, #7CC95A 55%); }
 .scn small { font-size: 12px; line-height: 1.2; padding: 0 4px; }
 .scn.on { border-color: var(--primary); }
+.gplot { min-width: 74px; min-height: 92px; align-content: end; gap: 3px; }
+.gplot .gp { display: grid; place-items: end center; height: 40px; }
+.gplot small { font-weight: 700; color: var(--muted); }
+.gbar { display: block; width: 52px; height: 6px; border-radius: 3px; background: #E2CFB6; overflow: hidden; }
+.gbar b { display: block; height: 100%; background: #5CC260; border-radius: 3px; }
