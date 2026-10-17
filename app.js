@@ -422,6 +422,11 @@ function modal(html, wire) {
   if (wire) wire(ov);
   const f = ov.querySelector("[data-autofocus]") || ov.querySelector("button"); if (f) f.focus();
 }
+/* ---------- full screen ---------- */
+// Hides the phone's own bottom buttons so little hands don't tap them. Browsers only allow it after a tap, so we re-enter on the next tap.
+function goFull() { const el = document.documentElement; if (!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen({ navigationUI: "hide" }).catch(() => {}); }
+document.addEventListener("pointerup", () => { if (lget("hd.full", false) && !HOST) goFull(); });
+
 /* ---------- feedback ---------- */
 // Anyone signed in can send feedback; only the app owner (listed in app_owners in Supabase) can read it all.
 const FB_KINDS = [["bug", "🐞", "Something's not working", "What happened? What did you expect to happen?"], ["idea", "💡", "An idea", "What would make the app better for your family?"], ["love", "❤️", "Something I love", "What's working well?"], ["other", "💬", "Something else", "Tell us anything."]];
@@ -2202,6 +2207,7 @@ function deviceCard() {
   if (HOST) return "";
   return `<section class="card"><h3 style="font-size:19px">This device</h3>${installHelp() || `<p class="meta" style="margin:0">Installed on this device.</p>`}
     <label class="row" style="gap:8px"><input type="checkbox" id="muteDev" ${lget("hd.mute", false) ? "checked" : ""}> Mute sounds on this device</label>
+    ${document.documentElement.requestFullscreen ? `<label class="row" style="gap:8px"><input type="checkbox" id="fullDev" ${lget("hd.full", false) ? "checked" : ""}> Full screen: hide the phone's bottom buttons</label>` : ""}
     <div class="row"><button class="btn small" id="newsBtn">✨ What's new</button><button class="btn small" id="fbBtn">💬 Send feedback</button>${S.owner ? `<button class="btn small primary" id="fbInbox">📥 Feedback inbox${S.fbNew ? ` (${S.fbNew} new)` : ""}</button>` : ""}</div>
     ${S.mode === "cloud" ? `<button class="btn small ghost" id="signOutBtn">Sign out</button>` : HOST ? "" : `<button class="btn small ghost" id="leaveLocal">Leave try-it-out mode</button>`}</section>`;
 }
@@ -2925,6 +2931,7 @@ function wireSettings() {
   on("#newsBtn", async () => showWhatsNew((await loadNews(false)).slice(0, 3)));
   on("#bkUp", pickBackupFile);
   const md = $("#muteDev"); if (md) md.onchange = () => { lset("hd.mute", md.checked); soundIcon(); };
+  const fd = $("#fullDev"); if (fd) fd.onchange = () => { lset("hd.full", fd.checked); fd.checked ? goFull() : (document.fullscreenElement && document.exitFullscreen().catch(() => {})); };
   on("#signOutBtn", () => confirmBox("Sign out?", "You'll need your email and password to sign back in on this device.", "Sign out", () => sb.auth.signOut()));
   on("#leaveLocal", () => confirmBox("Leave try-it-out mode?", "Points saved on this device stay here in case you come back.", "Leave", () => { ldel("hd.localMode"); location.reload(); }));
   on("#installBtn", async () => { if (!deferredInstall) return; deferredInstall.prompt(); deferredInstall = null; });

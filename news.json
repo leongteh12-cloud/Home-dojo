@@ -1,5 +1,12 @@
 [
   {
+    "v": "home-dojo-v36",
+    "date": "17 Oct 2026",
+    "items": [
+      "📱 Full screen: the app now hides the phone's bottom buttons, so they're not tapped by accident. Turn it on or off in Settings → This device."
+    ]
+  },
+  {
     "v": "home-dojo-v35",
     "date": "17 Oct 2026",
     "items": [
