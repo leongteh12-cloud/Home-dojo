@@ -653,3 +653,39 @@ h2 .streak { font-size: 13px; margin-left: 4px; }
 .lockset { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center; background: var(--surface-2); border-radius: 14px; padding: 12px; }
 .lockshow { font-size: 22px; letter-spacing: 4px; }
 .lockshow.big { font-size: 40px; text-align: center; }
+.lobby.yard { margin-bottom: 0; }
+.yard .walker.monster { width: 32%; }
+.yard .walker.pet { width: 14%; }
+.hero.hero-solo { grid-template-columns: 1fr; margin-top: 4px; }
+.yardbar { display: grid; grid-template-columns: repeat(auto-fit, minmax(50px, 1fr)); gap: 6px; margin-top: 10px; }
+.yardbar button { position: relative; display: grid; justify-items: center; gap: 2px; border: 0; border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); padding: 8px 4px; font: 600 13px var(--font-display); color: var(--ink); min-height: 64px; }
+.yardbar .yi { font-size: 26px; line-height: 1; }
+.yardbar button:active { transform: scale(.95); }
+.ybadge { position: absolute; top: 4px; right: 8px; min-width: 20px; height: 20px; border-radius: 10px; background: #FF4D4D; color: #fff; font: 700 12px/20px var(--font-display); font-style: normal; }
+.thing { position: absolute; font-size: 30px; line-height: 1; transform: translate(-50%, -100%); pointer-events: none; }
+.yard .walker .bob { position: relative; }
+.mud { position: absolute; width: 16%; height: 10%; border-radius: 50%; background: #7A5230; opacity: .85; box-shadow: 6px 4px 0 -2px #7A5230; pointer-events: none; }
+.mailglow { animation: mailpulse 1.2s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes mailpulse { 50% { transform: scale(1.25); } }
+.notes { display: grid; gap: 10px; text-align: left; max-height: 50vh; overflow: auto; }
+.notecard { background: var(--surface-2); border-radius: 16px; padding: 12px; display: grid; gap: 6px; }
+.notecard.new { background: #FFF1D6; box-shadow: inset 0 0 0 2px #FFB400; }
+.notecard p { margin: 0; font-size: 18px; font-family: var(--font-display); }
+.nfrom { font-weight: 700; font-size: 14px; display: flex; justify-content: space-between; gap: 8px; }
+.nfrom span { font-weight: 400; color: var(--muted); }
+.gplots { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.gplot { display: grid; justify-items: center; background: #F3E6D6; border-radius: 14px; padding: 8px 10px; }
+.gplot .gp { font-size: 34px; line-height: 1.1; }
+.seedpick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.seedpick button { aspect-ratio: 1; font-size: 34px; border-radius: 16px; border: 2px solid var(--line); background: var(--surface); }
+textarea.inp { min-height: 80px; resize: vertical; font: inherit; }
+.recrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; }
+.btn.recording { background: #FF4D4D; color: #fff; animation: mailpulse 1s infinite; }
+.qs { display: grid; gap: 14px; text-align: center; min-height: 340px; align-content: center; }
+.qs-ic { font-size: 72px; line-height: 1; animation: qspop .35s ease-out; }
+@keyframes qspop { from { transform: scale(.6); opacity: 0; } }
+.qs h2 { font-size: 28px; }
+.qs-t { font-size: 19px; line-height: 1.45; margin: 0; }
+.qs-dots { display: flex; justify-content: center; gap: 7px; }
+.qs-dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
+.qs-dots i.on { background: var(--primary); width: 22px; border-radius: 5px; }

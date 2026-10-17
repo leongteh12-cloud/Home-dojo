@@ -3,7 +3,7 @@
 (function () {
 "use strict";
 
-const { star, LIB, BONUS, SHOP, SLOTS, LEVELS, COLORS, SHAPES, TOPS, SPECIES, MOUTHS, monsterSvg, shade, trophySvg, medalSvg, badgeSvg, HOUSE, FURNI, houseTier, houseSvg, houseOutsideSvg, petSvg, PET_IDS, PRICE_TIERS, priceTier, furniCloseup } = window.HD;
+const { star, LIB, BONUS, SHOP, SLOTS, LEVELS, COLORS, SHAPES, TOPS, SPECIES, MOUTHS, EYESTYLES, BROWS, NOSES, CHEEKS, ARMS, BELLIES, LOOK_DEFAULTS, monsterSvg, shade, trophySvg, medalSvg, badgeSvg, HOUSE, FURNI, houseTier, houseSvg, houseOutsideSvg, petSvg, PET_IDS, PRICE_TIERS, priceTier, furniCloseup } = window.HD;
 const pendingCfg = () => S.outbox.some((o) => o.op === "saveConfig" || o.op === "equip" || o.op === "monster" || o.op === "family");
 const CONF = window.HOME_DOJO_CONFIG || {};
 // A host page (such as the claude.ai version) can supply its own storage: { start, saveCfg, add, remove }.
@@ -637,8 +637,8 @@ function welcomeJoined() {
   modal(`<div style="font-size:44px;line-height:1">🎉</div><h2>Welcome to ${esc(S.family ? S.family.name : "the family")}!</h2>
     ${installHelp() ? `<div style="text-align:left">${installHelp()}</div>` : ""}
     <ul class="welcome-list"><li>Tap <b>Parents</b> to give Dojos when you see great behaviour.</li>${parent ? "<li>Settings has the children's behaviours, rewards and invites.</li>" : "<li>A parent looks after rewards and settings.</li>"}<li>Everything you do shows up on everyone's phones straight away.</li></ul>
-    <button class="btn primary" id="welOk">Let's go!</button>`, () => {
-    $("#welOk").onclick = closeModal;
+    <div class="row" style="justify-content:center"><button class="btn" id="welQs">⚡ 1-minute quick start</button><button class="btn primary" id="welOk">Let's go!</button></div>`, () => {
+    $("#welOk").onclick = closeModal; $("#welQs").onclick = showQuickStart;
     const ib = $("#installBtn"); if (ib) ib.onclick = async () => { if (!deferredInstall) return; deferredInstall.prompt(); deferredInstall = null; closeModal(); };
   });
 }
@@ -671,17 +671,18 @@ function installHelp() {
 const LOBBY = { st: {}, root: null, raf: 0, last: 0, sel: null };
 const LAWN = { x0: 26, x1: 374, y0: 188, y1: 284 };
 const rnd = (a, b) => a + Math.random() * (b - a);
-function lobbyActors() {
+// solo: one child's own yard on their profile (their house, their monster and pets). Otherwise everyone's lawn.
+function lobbyActors(solo) {
   const out = [];
-  (S.cfg.kids || []).forEach((k) => {
+  (solo ? [solo] : S.cfg.kids || []).forEach((k) => {
     const st = stats(k.id);
     out.push({ id: "k:" + k.id, kid: k, type: "monster", level: st.level });
     PET_IDS.filter((p) => st.owned.has(p) && p !== (wornBy(k)).pet).forEach((p) => out.push({ id: "p:" + k.id + ":" + p, kid: k, type: "pet", pet: p }));
   });
   return out;
 }
-function viewLobby() {
-  const kids = S.cfg.kids || [], n = kids.length, slot = 400 / Math.max(n, 1), hw = Math.min(140, slot * 0.82);
+function viewLobby(solo) {
+  const kids = solo ? [solo] : S.cfg.kids || [], n = kids.length, slot = 400 / Math.max(n, 1), hw = solo ? 150 : Math.min(140, slot * 0.82);
   let s = `<svg viewBox="0 0 400 300" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="lbSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8FD3FF"/><stop offset="1" stop-color="#E4F6FF"/></linearGradient></defs>
     <rect width="400" height="300" fill="url(#lbSky)"/><g data-egg="sun" style="cursor:pointer"><circle cx="352" cy="40" r="30" fill="#FFE98A" opacity=".5"/><circle cx="352" cy="40" r="20" fill="#FFD43B"/></g>
     ${[[40, 42, 1], [210, 26, .8], [300, 70, .7]].map(([x, y, k], i) => `<g class="cloud" data-egg="cloud" style="animation-delay:${-i * 13}s;cursor:pointer"><g transform="translate(${x} ${y}) scale(${k})"><ellipse cx="0" cy="0" rx="26" ry="12" fill="#fff"/><ellipse cx="18" cy="-6" rx="16" ry="12" fill="#fff"/><ellipse cx="-14" cy="-4" rx="12" ry="9" fill="#fff"/></g></g>`).join("")}
@@ -695,18 +696,22 @@ function viewLobby() {
       <g transform="translate(${cx - hw / 2} ${158 - 110 * sc}) scale(${sc})">${houseOutsideSvg(houseTier(st.owned), k.look.color)}</g>
       <g transform="translate(${cx + hw / 2 - 8} 146)"><rect x="-2" y="0" width="4" height="16" fill="#8D6E63"/><rect x="-22" y="-12" width="44" height="15" rx="4" fill="#FFF8E7" stroke="#8D6E63" stroke-width="2"/><text x="0" y="-1.5" text-anchor="middle" font-family="Fredoka, sans-serif" font-weight="600" font-size="10" fill="#5B4636">${esc(k.name.slice(0, 8))}</text></g></g>`;
   });
-  const fl = [[30, 200], [372, 214], [120, 292], [260, 196], [338, 280], [70, 262], [200, 276]];
+  if (solo) s += yardSvg(solo);
+  const fl = solo ? [[30, 200], [120, 292], [338, 280], [70, 262], [200, 276]] : [[30, 200], [372, 214], [120, 292], [260, 196], [338, 280], [70, 262], [200, 276]];
   // Decorations sit on top of the sky but must never block taps on the sun, clouds or houses.
   s += `<g pointer-events="none">${seasonDecor(seasonNow(), kids, kids.some((k) => isBirthday(k))) + birthdayDecor(kids, slot)}</g>`;
   s += fl.map(([x, y], i) => `<g data-egg="flower" style="cursor:pointer" transform="translate(${x} ${y})"><path d="M0 0 V-8" stroke="#3E8E41" stroke-width="2"/>${[0, 72, 144, 216, 288].map((a) => `<circle cx="${Math.cos(a * Math.PI / 180) * 3.5}" cy="${-10 + Math.sin(a * Math.PI / 180) * 3.5}" r="3" fill="${["#FF5E8A", "#FFD43B", "#fff", "#C77DFF"][i % 4]}"/>`).join("")}<circle cy="-10" r="2.2" fill="#FFB400"/></g>`).join("");
   s += `</svg>`;
+  if (solo) return `<section class="lobby yard${LOBBY.night ? " night" : ""} season-${seasonNow() || "none"}" id="lobby" data-solo="${esc(solo.id)}" aria-label="${esc(solo.name)}'s yard">${s}<div class="nightsky" aria-hidden="true"><span class="moon"></span></div><div class="lobby-layer" id="lobbyLayer"></div></section>
+    ${yardBar(solo)}`;
   return `<section class="lobby${LOBBY.night ? " night" : ""} season-${seasonNow() || "none"}" id="lobby" aria-label="The monsters' garden">${s}<div class="nightsky" aria-hidden="true"><span class="moon"></span>${Array.from({ length: 8 }, (_, i) => `<i class="fly" style="left:${8 + i * 11}%;top:${50 + (i * 37) % 40}%;animation-delay:${i * .6}s"></i>`).join("")}</div><div class="lobby-layer" id="lobbyLayer"></div><button class="bedbtn" id="bedtime" aria-label="Bedtime">🌙</button>${isl() ? `<button class="dockbtn" id="toIslands" aria-label="Sail to Monster Islands">⛵ Islands${(S.cfg.kids || []).concat([{ id: "family" }]).some((k) => isl().hasNew(k.id)) ? `<span class="isl-new" aria-hidden="true">🎁</span>` : ""}</button>` : ""}</section>
     <p class="meta lobby-hint">Tap a monster to play, then tap the grass to send it there, or tap another monster for a high five or hug. Tap a house to visit, or sail to the islands. Psst… try tapping the sun and the clouds.</p>`;
 }
 function mountLobby() {
   const root = $("#lobbyLayer"); if (!root) return;
   LOBBY.root = root;
-  const actors = lobbyActors(), keep = new Set(actors.map((a) => a.id));
+  const solo = kidById($("#lobby").dataset.solo || ""); LOBBY.solo = solo || null;
+  const actors = lobbyActors(solo), keep = new Set(actors.map((a) => a.id));
   Object.keys(LOBBY.st).forEach((id) => { if (!keep.has(id)) delete LOBBY.st[id]; });
   root.innerHTML = actors.map((a) => {
     const art = a.type === "monster" ? monsterSvg(a.kid.look, dressedFor(a.kid), a.level) : `<svg viewBox="-30 -34 60 60" aria-hidden="true">${petSvg(a.pet)}</svg>`;
@@ -723,7 +728,8 @@ function mountLobby() {
     st.el.onclick = () => lobbyTap(st);
     place(st);
   });
-  const lob = $("#lobby"), kidsL = S.cfg.kids || [], slotL = 400 / Math.max(kidsL.length, 1);
+  if (solo) { const act = root.querySelector(`[data-w="${CSS.escape("k:" + solo.id)}"] .act`); if (act) act.id = "heroMonster"; mountYard(solo); }
+  const lob = $("#lobby"), kidsL = solo ? [solo] : S.cfg.kids || [], slotL = 400 / Math.max(kidsL.length, 1);
   kidsL.forEach((k, i) => {
     const eg = eggsOf(k); if (!eg.waiting) return;
     const b = document.createElement("button"); b.className = "egg"; b.dataset.taps = "0";
@@ -739,10 +745,11 @@ function mountLobby() {
     };
     root.appendChild(b);
   });
-  $("#bedtime").onclick = (e) => { e.stopPropagation(); openBedtime(); };
+  const bt = $("#bedtime"); if (bt) bt.onclick = (e) => { e.stopPropagation(); openBedtime(); };
   const ti = $("#toIslands"); if (ti) ti.onclick = (e) => { e.stopPropagation(); go({ name: "islands" }); };
   lob.onclick = (e) => {
     const sec = e.target.closest("[data-egg]"); if (sec) return lobbySecret(sec.dataset.egg, e);
+    const yd = e.target.closest("[data-yard]"); if (yd && solo) return yardDo(solo, yd.dataset.yard);
     if (e.target.closest(".walker") || e.target.closest("[data-visit]")) return;
     const r = lob.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * 400, y = (e.clientY - r.top) / r.height * 300;
     if (y < LAWN.y0 - 25) return;
@@ -842,6 +849,7 @@ function lobbyTick(t) {
     }
     place(st);
   });
+  yardTick();
   LOBBY.raf = requestAnimationFrame(lobbyTick);
 }
 const TRICKS = {
@@ -863,7 +871,8 @@ function lobbyTap(st) {
   st.busy = ms / 1000 + 0.6; st.walking = false;
   if (!reduced()) el.querySelector(".act").animate(frames, { duration: ms, easing: "ease-in-out" });
   beep(notes, .45);
-  const say = a.type === "pet" ? PET_SAYS[a.pet] || "Hi!" : trick === "peek" ? "Peekaboo!" : (Math.random() < .25 && a.kid.monsterName ? `I'm ${a.kid.monsterName}!` : SAYS[Math.floor(Math.random() * SAYS.length)]);
+  const lines = LOBBY.solo && a.type === "monster" ? monsterLines(a.kid) : null;
+  const say = a.type === "pet" ? PET_SAYS[a.pet] || "Hi!" : trick === "peek" ? "Peekaboo!" : lines && lines.length && Math.random() < .6 ? lines[Math.floor(Math.random() * lines.length)] : (Math.random() < .25 && a.kid.monsterName ? `I'm ${a.kid.monsterName}!` : SAYS[Math.floor(Math.random() * SAYS.length)]);
   const old = el.querySelector(".bubble"); if (old) old.remove();
   const b = document.createElement("span"); b.className = "bubble"; b.textContent = say; el.appendChild(b);
   setTimeout(() => b.remove(), 1600);
@@ -1943,7 +1952,7 @@ function viewHome() {
     </button>`;
   }).join("")}</div>
   <div class="list" style="margin-top:18px">
-  ${kidsMode() ? "" : `<button class="btn ghost" id="guideBtn" style="justify-self:start">📖 Carers' guide: how and when to give Dojos</button>`}
+  ${kidsMode() ? "" : `<div class="row"><button class="btn ghost" id="quickBtn">⚡ Quick start</button><button class="btn ghost" id="guideBtn">📖 Carers' guide: how and when to give Dojos</button></div>`}
   ${nudge ? `<div class="note row" style="justify-content:space-between"><span>It's been a while since your last backup.</span><button class="btn small primary" id="nudgeBackup">Back up now</button></div>` : ""}
   ${S.mode === "local" && !HOST ? `<p class="note">Try-it-out mode: points are saved on this device only.</p>` : ""}
   ${installHelp()}</div>`;
@@ -2031,7 +2040,8 @@ function viewKid(kid, tab) {
         }).join("")}</div>`;
       }).join("") : `<div class="empty">Nothing in the wardrobe yet.<br>Buy hats, outfits and pets in the Shop with your Dojo $.</div><div class="row" style="justify-content:center"><button class="btn kid" data-tab="shop">Go to the Shop</button></div>`);
     } else {
-      const opt = (field, val, label, extra) => `<button aria-pressed="${(lk[field] || (field === "species" ? "monster" : field === "mouth" ? "smile" : null)) === val}" data-look="${field}" data-v="${val}">${extra || ""}${label}</button>`;
+      const opt = (field, val, label, extra) => `<button aria-pressed="${(lk[field] || LOOK_DEFAULTS[field]) === val}" data-look="${field}" data-v="${val}">${extra || ""}${label}</button>`;
+      const row = (title, field, list) => `<div><div class="meta" style="font-weight:700;margin-bottom:6px">${title}</div><div class="seg">${list.map(([v, l]) => opt(field, v, l)).join("")}</div></div>`;
       const mini = (patch) => `<span class="mini">${monsterSvg(Object.assign({}, lk, patch), {}, 1)}</span>`;
       body = subnav + `<div class="card make">
         <div class="studio" aria-live="polite"><div class="m" id="studioMonster">${monsterSvg(lk, eq, st.level)}</div><div class="studio-name" id="studioName">${esc(kid.monsterName || "My monster")}</div></div>
@@ -2041,7 +2051,9 @@ function viewKid(kid, tab) {
         ${lk.species === "robot" ? "" : `<div><div class="meta" style="font-weight:700;margin-bottom:6px">Body</div><div class="seg">${SHAPES.map(([v, l]) => opt("shape", v, l)).join("")}</div></div>`}
         <div><div class="meta" style="font-weight:700;margin-bottom:6px">Eyes</div><div class="seg">${[1, 2, 3].map((v) => `<button aria-pressed="${(lk.eyes || 2) === v}" data-look="eyes" data-v="${v}">${v} ${v === 1 ? "eye" : "eyes"}</button>`).join("")}</div></div>
         ${lk.species === "robot" ? "" : `<div><div class="meta" style="font-weight:700;margin-bottom:6px">On top</div><div class="seg">${TOPS.map(([v, l]) => opt("top", v, l)).join("")}</div></div>`}
+        ${row("Eye style", "eyeStyle", EYESTYLES)}${row("Eyebrows", "brows", BROWS)}${row("Nose", "nose", NOSES)}
         <div><div class="meta" style="font-weight:700;margin-bottom:6px">Mouth</div><div class="seg">${MOUTHS.map(([v, l]) => opt("mouth", v, l)).join("")}</div></div>
+        ${row("Cheeks", "cheeks", CHEEKS)}${lk.species === "robot" ? "" : row("Arms and hands", "arms", ARMS) + row("Tummy", "belly", BELLIES)}
         <button class="btn kid" id="surprise">🎲 Surprise me!</button></div>`;
     }
   } else {
@@ -2050,7 +2062,7 @@ function viewKid(kid, tab) {
     const counts = {}; wk.forEach((a) => { counts[a.label] = (counts[a.label] || 0) + (a.pts || 1); });
     const rows = Object.entries(counts).sort((a, b) => b[1] - a[1]); const max = Math.max(1, ...rows.map((r) => r[1]));
     const days = Array.from({ length: 7 }, (_, i) => { const s = ws + i * 864e5, e = s + 864e5; return { d: new Date(s), n: wk.filter((a) => a.at >= s && a.at < e).length, today: Date.now() >= s && Date.now() < e }; });
-    const recent = S.awards.filter((a) => a.kid === kid.id).slice(-30).reverse();
+    const recent = S.awards.filter((a) => a.kid === kid.id && a.kind !== "note").slice(-30).reverse();
     body = `<div class="wk"><div class="row" style="justify-content:space-between"><h3>This week</h3><span class="bal" style="font-size:26px">${wk.length}<span>Dojos</span></span></div>
       <div class="days">${days.map((d) => `<div class="d${d.today ? " today" : ""}">${d.d.toLocaleDateString([], { weekday: "short" })}<b>${d.n}</b></div>`).join("")}</div>
       ${rows.length ? rows.map(([l, n]) => `<div class="wkrow"><span>${esc(l)}</span><div class="bar"><i style="width:${Math.round(100 * n / max)}%"></i></div><b>${n}</b></div>`).join("") : `<div class="meta">No points yet this week.</div>`}
@@ -2063,7 +2075,8 @@ function viewKid(kid, tab) {
   }
   return `<div style="--kid:${esc(kid.look.color)}">
     <div class="row" style="margin-bottom:10px;justify-content:space-between"><button class="iconbtn" id="backBtn" aria-label="Back to all monsters">← All monsters</button>${isToddler(kid) ? `<button class="btn small ghost" id="toddlerView">Toddler view</button>` : ""}</div>
-    <section class="hero"><div class="m" id="heroMonster" role="button" tabindex="0" aria-label="Talk to the monster">${monsterSvg(kid.look, dressedFor(kid), st.level)}</div>
+    ${viewLobby(kid)}
+    <section class="hero hero-solo">
       <div class="stack"><h1>${esc(kid.name)}</h1>${wallet(st)}
       <div class="row" style="gap:8px"><span class="lvl">Level ${st.level}</span>${streakChip(kid.id)}${kid.monsterName ? `<span class="meta">${esc(kid.monsterName)}</span>` : ""}</div>
       ${(() => { const sh = shelfArt(kid); return sh.length ? `<div class="minishelf">${sh.map((a) => `<span>${a}</span>`).join("")}</div>` : ""; })()}
@@ -2197,6 +2210,223 @@ function viewSettings() {
   return top + `<div class="list" style="gap:18px">${body}</div>`;
 }
 
+/* ---------- the yard: things to do in each child's own little world ---------- */
+// Mailbox (notes from grown-ups, read aloud), a garden every Dojo waters, a ball to fetch, snacks and a bubble bath.
+// Notes are award records (kind "note"; label = the words, item = an optional recorded voice). Everything else lives in kid.yard.
+const SEEDS = [["sunflower", "🌻"], ["tulip", "🌷"], ["strawberry", "🍓"], ["tree", "🌳"], ["rose", "🌹"], ["cactus", "🌵"], ["apple", "🍎"], ["mushroom", "🍄"]];
+const GARDEN_STEP = 2;   // Dojos per growth stage; a seed blooms after 4 stages
+const SNACKS = ["🍎", "🍌", "🍓", "🥕", "🍪", "🧁", "🍉", "🥦"];
+const yardOf = (kid) => kid.yard || {};
+const notesOf = (kid) => S.awards.filter((a) => a.kid === kid.id && a.kind === "note").slice().reverse();
+const unreadOf = (kid) => notesOf(kid).filter((n) => n.at > (yardOf(kid).seen || 0)).length;
+const plantStage = (p, earned) => Math.max(0, Math.min(4, Math.floor((earned - p.e) / GARDEN_STEP)));
+const seedIcon = (t) => (SEEDS.find((x) => x[0] === t) || SEEDS[0])[1];
+// Mud builds up a little every couple of days since the last bath (and starts a bit muddy, to invite the first one).
+const mudOf = (kid) => { const b = yardOf(kid).bath; return b ? Math.min(3, Math.floor((Date.now() - b) / (2 * 864e5))) : 1; };
+function saveYard(kid, patch) { setMonster(kid, { yard: Object.assign({}, yardOf(kid), patch) }); }
+
+function yardSvg(kid) {
+  const unread = unreadOf(kid), earned = stats(kid.id).earned, garden = (yardOf(kid).garden || []).slice(-4);
+  let s = `<g data-yard="mail" style="cursor:pointer" transform="translate(92 160)"><rect x="-2" y="-16" width="5" height="22" fill="#8D6E63"/>
+    <path d="M-14 -16 V-32 Q-14 -40 -4 -40 H6 Q16 -40 16 -32 V-16Z" fill="#3D7BFF" stroke="#1E4FC2" stroke-width="2"/><rect x="-12" y="-27" width="10" height="2" fill="#1E4FC2"/>
+    <g transform="translate(16 -30) rotate(${unread ? 0 : 80})"><rect x="0" y="-1.5" width="2.5" height="12" fill="#5B4636"/><rect x="0" y="-1.5" width="10" height="6" fill="#FF4D4D"/></g>
+    ${unread ? `<g class="mailglow"><circle cx="1" cy="-50" r="8" fill="#FF4D4D"/><text x="1" y="-46.5" text-anchor="middle" font-family="Fredoka, sans-serif" font-weight="700" font-size="10" fill="#fff">${unread}</text></g>` : ""}</g>`;
+  s += `<g data-yard="garden" style="cursor:pointer">`;
+  for (let i = 0; i < 4; i++) {
+    const x = 300 + i * 24, y = 176, p = garden[i];
+    s += `<ellipse cx="${x}" cy="${y}" rx="10" ry="4" fill="#8B5E3C"/>`;
+    if (!p) { s += `<text x="${x}" y="${y + 1}" text-anchor="middle" font-size="5" fill="#E9D6B4">+</text>`; continue; }
+    const st = plantStage(p, earned);
+    if (st === 0) s += `<ellipse cx="${x}" cy="${y - 1}" rx="2" ry="1.4" fill="#5B3A1E"/>`;
+    else if (st < 4) { const h = 4 + st * 4; s += `<path d="M${x} ${y} V${y - h}" stroke="#3E8E41" stroke-width="1.6"/><ellipse cx="${x - 3}" cy="${y - h + 2}" rx="3" ry="1.6" fill="#5CC260" transform="rotate(-25 ${x - 3} ${y - h + 2})"/><ellipse cx="${x + 3}" cy="${y - h + 3}" rx="3" ry="1.6" fill="#5CC260" transform="rotate(25 ${x + 3} ${y - h + 3})"/>${st === 3 ? `<circle cx="${x}" cy="${y - h - 1}" r="2.4" fill="#FF9EC4"/>` : ""}`; }
+    else s += `<path d="M${x} ${y} V${y - 10}" stroke="#3E8E41" stroke-width="1.6"/><text x="${x}" y="${y - 7}" text-anchor="middle" font-size="15">${seedIcon(p.t)}</text>`;
+  }
+  return s + `</g>`;
+}
+function yardBar(kid) {
+  const unread = unreadOf(kid);
+  const b = (id, ic, l, extra) => `<button data-yard="${id}"><span class="yi" aria-hidden="true">${ic}</span><span>${l}</span>${extra || ""}</button>`;
+  return `<div class="yardbar">${b("mail", "📬", "Mail", unread ? `<i class="ybadge">${unread}</i>` : "")}${b("garden", "🌱", "Garden")}${b("ball", "⚽", "Ball")}${b("snack", "🍎", "Snack")}${b("bath", "🛁", "Bath")}${kidsMode() ? "" : b("write", "✉️", "Write")}</div>
+    <p class="meta lobby-hint">Tap your monster to play, or tap the grass to walk there. Tap the house to go inside.</p>`;
+}
+function mountYard(kid) {
+  document.querySelectorAll(".yardbar [data-yard]").forEach((b) => b.onclick = () => yardDo(kid, b.dataset.yard));
+  const st = LOBBY.st["k:" + kid.id]; if (!st || !st.el) return;
+  const bob = st.el.querySelector(".bob"), n = mudOf(kid);
+  [[36, 58], [62, 70], [50, 44]].slice(0, n).forEach(([x, y], i) => { const m = document.createElement("i"); m.className = "mud"; m.style.left = x + "%"; m.style.top = y + "%"; m.style.transform = `rotate(${i * 40}deg)`; bob.appendChild(m); });
+}
+function yardDo(kid, what) {
+  if (what === "mail") return openMail(kid);
+  if (what === "write") return writeNote(kid);
+  if (what === "garden") return openGarden(kid);
+  if (what === "ball") return throwThing(kid, "ball");
+  if (what === "snack") return throwThing(kid, "snack");
+  if (what === "bath") return bathTime(kid);
+}
+const yardMonster = (kid) => LOBBY.st["k:" + kid.id];
+function sayBubble(st, text, who) {
+  if (!st || !st.el) return;
+  const old = st.el.querySelector(".bubble"); if (old) old.remove();
+  const b = document.createElement("span"); b.className = "bubble"; b.textContent = text; st.el.appendChild(b); setTimeout(() => b.remove(), 1600);
+  if (who !== false) speak(text, who);
+}
+function doTrick(st, name) {
+  const [frames, ms, notes] = TRICKS[name];
+  st.busy = ms / 1000 + .5; st.walking = false;
+  if (!reduced()) st.el.querySelector(".act").animate(frames, { duration: ms, easing: "ease-in-out" });
+  beep(notes, .4);
+}
+function floatIcons(st, icons) {
+  const lob = $("#lobby"); if (!lob || !st.el || reduced()) return;
+  const lr = lob.getBoundingClientRect(), r = st.el.getBoundingClientRect();
+  icons.forEach((ic, i) => setTimeout(() => {
+    const f = document.createElement("span"); f.className = "floaty"; f.textContent = ic;
+    f.style.left = (r.left + r.width / 2 - lr.left + rnd(-30, 30)) + "px"; f.style.top = (r.top - lr.top + r.height * .4) + "px"; lob.appendChild(f);
+    f.animate([{ transform: "translate(-50%, 0) scale(.5)", opacity: 1 }, { transform: `translate(calc(-50% + ${rnd(-30, 30)}px), -70px) scale(1.2)`, opacity: 0 }], { duration: 1200, easing: "ease-out" }).onfinish = () => f.remove();
+  }, i * 120));
+}
+
+// Ball and snacks: something lands on the lawn and the monster (and pets, for the ball) runs to it.
+function throwThing(kid, kind) {
+  const st = yardMonster(kid), root = LOBBY.root; if (!st || !root) return;
+  if (LOBBY.thing && LOBBY.thing.el) LOBBY.thing.el.remove();
+  let x = rnd(LAWN.x0 + 20, LAWN.x1 - 20); if (Math.abs(x - st.x) < 70) x = st.x < 200 ? Math.min(LAWN.x1 - 20, st.x + 130) : Math.max(LAWN.x0 + 20, st.x - 130);
+  const y = rnd(LAWN.y0 + 10, LAWN.y1 - 5);
+  const el = document.createElement("span"); el.className = "thing"; el.textContent = kind === "ball" ? "⚽" : SNACKS[Math.floor(Math.random() * SNACKS.length)];
+  el.style.left = (x / 4) + "%"; el.style.top = (y / 3) + "%"; el.style.zIndex = String(Math.round(y));
+  root.appendChild(el);
+  if (!reduced()) el.animate(kind === "ball"
+    ? [{ transform: `translate(calc(-50% + ${(st.x - x) / 4 * 3.9}px), calc(-100% - 10px)) scale(.7)` }, { transform: "translate(-50%, -260%) scale(1)", offset: .5 }, { transform: "translate(-50%, -100%)", offset: .8 }, { transform: "translate(-50%, -150%)", offset: .9 }, { transform: "translate(-50%, -100%)" }]
+    : [{ transform: "translate(-50%, -500%) scale(.6)", opacity: 0 }, { transform: "translate(-50%, -100%) scale(1.2)", opacity: 1, offset: .7 }, { transform: "translate(-50%, -100%) scale(1)" }], { duration: 700, easing: "ease-out" });
+  beep(kind === "ball" ? [[523, .08, 0, "pluck"], [392, .1, .5, "pluck"]] : [[1047, .1, 0, "pluck"], [1319, .12, .1, "pluck"]], .4);
+  LOBBY.thing = { kind, x, y, el, kid };
+  const go = (s, dx) => { s.tx = Math.max(LAWN.x0, Math.min(LAWN.x1, x + dx)); s.ty = y; s.cmd = true; s.wait = 0; s.busy = 0; s.meet = null; };
+  setTimeout(() => {
+    go(st, x > st.x ? -12 : 12);
+    if (kind === "ball") Object.values(LOBBY.st).forEach((p) => { if (p.actor.type === "pet") go(p, rnd(-30, 30)); });
+  }, 450);
+}
+function yardTick() {
+  const t = LOBBY.thing; if (!t || !LOBBY.solo) return;
+  const st = yardMonster(t.kid); if (!st) return;
+  if (Math.hypot(st.x - t.x, st.y - t.y) > 16) return;
+  LOBBY.thing = null;
+  if (t.kind === "ball") {
+    doTrick(st, "jump"); sayBubble(st, ["Got it!", "Wheee!", "Again!", "Goal!"][Math.floor(Math.random() * 4)], t.kid);
+    if (!reduced()) t.el.animate([{ transform: "translate(-50%, -100%)" }, { transform: "translate(-50%, -300%) scale(1.2)" }, { transform: "translate(-50%, -100%)" }], { duration: 700 });
+    setTimeout(() => t.el.remove(), 900);
+  } else {
+    doTrick(st, "wiggle"); sayBubble(st, ["Yum!", "Yummy!", "Crunch crunch!", "Delicious!"][Math.floor(Math.random() * 4)], t.kid);
+    if (!reduced()) t.el.animate([{ transform: "translate(-50%, -100%) scale(1)" }, { transform: "translate(-50%, -100%) scale(.5)", opacity: .6 }, { transform: "translate(-50%, -100%) scale(0)", opacity: 0 }], { duration: 900, fill: "forwards" });
+    beep([[330, .06, 0, "pluck"], [392, .06, .15, "pluck"], [330, .06, .3, "pluck"]], .35);
+    floatIcons(st, ["💖", "😋", "💛"]);
+    setTimeout(() => t.el.remove(), 950);
+  }
+}
+
+// Bath: bubbles, the mud washes off, and the monster is pleased with itself.
+function bathTime(kid) {
+  const st = yardMonster(kid); if (!st) return;
+  st.cmd = false; st.wait = 3; st.walking = false;
+  doTrick(st, "wiggle");
+  floatIcons(st, ["🫧", "🫧", "🫧", "🧼", "🫧", "✨", "🫧"]);
+  beep([[1568, .06, 0, "pluck"], [1760, .06, .12, "pluck"], [2093, .06, .24, "pluck"], [1760, .06, .36, "pluck"]], .3);
+  st.el.querySelectorAll(".mud").forEach((m) => { if (reduced()) return m.remove(); m.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 900, fill: "forwards" }).onfinish = () => m.remove(); });
+  setTimeout(() => { sayBubble(st, "So clean!", kid); doTrick(st, "spin"); }, 1000);
+  setTimeout(() => saveYard(kid, { bath: Date.now() }), 2400);
+}
+
+// Garden: plant a seed, then every Dojo the child earns waters it. One grows at a time.
+function openGarden(kid) {
+  const earned = stats(kid.id).earned, garden = yardOf(kid).garden || [], growing = garden.find((p) => plantStage(p, earned) < 4);
+  const plots = garden.slice(-8).map((p) => { const st = plantStage(p, earned); return `<div class="gplot"><span class="gp">${st >= 4 ? seedIcon(p.t) : ["🟤", "🌱", "🌿", "🪴"][st]}</span><small>${st >= 4 ? "Bloomed!" : "Growing"}</small></div>`; }).join("");
+  const left = growing ? (growing.e + GARDEN_STEP * 4) - earned : 0;
+  modal(`<div style="font-size:44px;line-height:1">🌱</div><h2>${esc(kid.name)}'s garden</h2>
+    ${plots ? `<div class="gplots">${plots}</div>` : `<p class="meta">Nothing planted yet.</p>`}
+    ${growing ? `<p>Your ${seedIcon(growing.t)} needs <b>${left} more ${left === 1 ? "Dojo" : "Dojos"}</b> to bloom. Every Dojo you earn waters it! 💧</p><button class="btn primary" id="gOk">OK</button>`
+      : `<p class="meta">Pick a seed to plant. Every Dojo you earn waters it until it blooms.</p><div class="seedpick">${SEEDS.map(([t, ic]) => `<button data-seed="${t}" aria-label="Plant a ${t}">${ic}</button>`).join("")}</div><button class="btn ghost" id="gOk">Not now</button>`}`, (ov) => {
+    $("#gOk").onclick = closeModal;
+    ov.querySelectorAll("[data-seed]").forEach((b) => b.onclick = () => {
+      closeModal();
+      saveYard(kid, { garden: garden.concat([{ t: b.dataset.seed, e: earned, at: Date.now() }]).slice(-24) });
+      beep([[523, .1, 0, "pluck"], [659, .1, .1, "pluck"], [784, .2, .2, "pluck"]], .4);
+      setTimeout(() => sayBubble(yardMonster(kid), "Let's grow it!", kid), 300);
+    });
+  });
+  speak(growing ? `${left} more Dojos and it will bloom!` : "Pick a seed to plant!");
+}
+
+// Mailbox: notes from the grown-ups, newest first. Opening it reads the newest unread note out loud.
+let noteAudio = null;
+function playNote(n) {
+  if (noteAudio) { try { noteAudio.pause(); } catch (e) {} noteAudio = null; }
+  if (!soundOn()) return;
+  if (n.item && /^data:audio\//.test(n.item)) { noteAudio = new Audio(n.item); noteAudio.play().catch(() => speak(n.label)); }
+  else speak(n.label);
+}
+const noteFrom = (n) => (n.by && S.mode === "cloud" ? memberName(n.by) : "") || "A grown-up";
+function openMail(kid) {
+  const notes = notesOf(kid).slice(0, 15), seen = yardOf(kid).seen || 0, first = notes.find((n) => n.at > seen) || notes[0];
+  modal(`<div style="font-size:44px;line-height:1">📬</div><h2>${esc(kid.name)}'s mail</h2>
+    ${notes.length ? `<div class="notes">${notes.map((n, i) => `<div class="notecard${n.at > seen ? " new" : ""}"><div class="nfrom">💌 From ${esc(noteFrom(n))} <span>${fmtWhen(n.at)}</span></div><p>${esc(n.label)}</p>
+      <div class="row"><button class="btn small primary" data-hear="${i}">🔊 Hear it</button>${canDelete(n) ? `<button class="btn small ghost" data-delnote="${esc(n.id)}">Delete</button>` : ""}</div></div>`).join("")}</div>`
+      : `<p class="meta">No mail yet. A grown-up can send you a note!</p>`}
+    <button class="btn" id="mailOk">Close</button>`, (ov) => {
+    $("#mailOk").onclick = () => { if (noteAudio) noteAudio.pause(); closeModal(); };
+    ov.querySelectorAll("[data-hear]").forEach((b) => b.onclick = () => playNote(notes[+b.dataset.hear]));
+    ov.querySelectorAll("[data-delnote]").forEach((b) => b.onclick = () => { removeRecord(b.dataset.delnote); closeModal(); });
+  });
+  if (first) playNote(first);
+  else speak("No mail yet!");
+  if (notes.length && notes[0].at > seen) saveYard(kid, { seen: notes[0].at });
+}
+// Grown-ups write a note, and can record their own voice reading it (up to 20 seconds).
+function writeNote(kid) {
+  let audioUrl = null, rec = null, timer = 0;
+  const canRec = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+  const ideas = ["So proud of you today!", "You were so kind to your brother!", "Great listening today!", "Thank you for helping!", "I love you!"];
+  const draw = (text) => modal(`<h2>✉️ A note for ${esc(kid.name)}</h2><p class="meta">It goes in ${esc(kid.name)}'s mailbox and is read out loud when it's opened.</p>
+    <textarea class="inp" id="ntText" maxlength="200" rows="3" placeholder="e.g. So proud of how calm you were at the shops!">${esc(text || "")}</textarea>
+    <div class="wchips">${ideas.map((t) => `<button class="wchip" data-idea="${esc(t)}">${esc(t)}</button>`).join("")}</div>
+    ${canRec ? `<div class="recrow">${audioUrl ? `<button class="btn small" id="ntPlay">▶ Play my voice</button><button class="btn small ghost" id="ntRedo">Record again</button><button class="btn small ghost" id="ntDrop">Remove</button>` : `<button class="btn small" id="ntRec">🎙️ Record my voice</button><span class="meta">Optional: ${esc(kid.name)} hears you read it</span>`}</div>` : ""}
+    <div class="row" style="justify-content:center"><button class="btn ghost" id="ntNo">Cancel</button><button class="btn primary" id="ntSend">Send</button></div>`, (ov) => {
+    const ta = $("#ntText");
+    ov.querySelectorAll("[data-idea]").forEach((b) => b.onclick = () => { ta.value = b.dataset.idea; });
+    $("#ntNo").onclick = () => { stopRec(); closeModal(); };
+    const rb = $("#ntRec"), redo = $("#ntRedo"), drop = $("#ntDrop"), play = $("#ntPlay");
+    if (rb) rb.onclick = () => startRec(rb, ta);
+    if (redo) redo.onclick = () => { audioUrl = null; draw(ta.value); };
+    if (drop) drop.onclick = () => { audioUrl = null; draw(ta.value); };
+    if (play) play.onclick = () => { const a = new Audio(audioUrl); a.play().catch(() => {}); };
+    $("#ntSend").onclick = () => {
+      const text = ta.value.trim();
+      if (!text && !audioUrl) return toast("Write a few words or record your voice first.");
+      stopRec();
+      addRecord({ kid: kid.id, kind: "note", label: text || "A voice note for you!", icon: "💌", item: audioUrl, pts: 0, at: Date.now() });
+      closeModal(); toast(`Note sent to ${kid.name}'s mailbox 📬`);
+    };
+  });
+  function stopRec() { clearTimeout(timer); if (rec && rec.state === "recording") rec.stop(); }
+  async function startRec(btn, ta) {
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch (e) { return toast("The microphone isn't available. Check the browser's permission for it."); }
+    const chunks = [], text = ta.value;
+    try { rec = new MediaRecorder(stream, { audioBitsPerSecond: 32000 }); } catch (e) { rec = new MediaRecorder(stream); }
+    rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    rec.onstop = () => {
+      stream.getTracks().forEach((t) => t.stop());
+      const blob = new Blob(chunks, { type: rec.mimeType || "audio/webm" });
+      if (blob.size > 600000) { toast("That recording is too long. Try a shorter one."); return draw(text); }
+      const fr = new FileReader(); fr.onload = () => { audioUrl = fr.result; draw(ta.value || text); }; fr.readAsDataURL(blob);
+    };
+    rec.start();
+    btn.textContent = "⏹ Stop recording"; btn.classList.add("recording");
+    btn.onclick = () => stopRec();
+    timer = setTimeout(stopRec, 20000);
+  }
+  draw("");
+}
+
 /* ---------- secret pictures: each child's own lock in Kids' play ---------- */
 // A child taps their 3 secret pictures in order to open their profile (and act as themselves on the islands),
 // so a brother or sister can't spend their Dojo $ or change their monster. Parents never see the lock.
@@ -2242,13 +2472,41 @@ function pickLock(k, done) {
   draw();
 }
 
+/* ---------- quick start: a one-minute tap-through for grown-ups ---------- */
+const QUICK = [
+  ["👾", "Welcome to Home Dojo", "The kids earn Dojos for great behaviour and grow their own monster."],
+  ["⭐", "Catch them being good", "Tap Parents, tap the child, then tap what they did. A cheer plays and they get +1."],
+  ["🗣️", "Say what you saw", "\"You took big breaths when you were cross. That's a Calm body point!\" Straight away is best."],
+  ["💰", "Two kinds of points", "Dojos count everything ever earned (levels, goals, trophies). Dojo $ is pocket money for the shop. Spending never takes Dojos away."],
+  ["🎁", "Treats and big goals", "Small treats cost Dojo $. Big reward goals unlock as Dojos add up. A parent hands them out."],
+  ["✋", "Points only go up", "Never take one away. If it's a tricky moment, just don't give one, and catch the next good thing."],
+  ["🎮", "Kids' play", "Hand it over: they dress their monster, play games, water their garden and open their mail. No points can be given or taken."],
+  ["👪", "One family, every phone", "Parents and carers share one family and see points straight away. Invite people in Settings, under Family."]
+];
+function showQuickStart() {
+  let i = 0;
+  const draw = () => modal(`<div class="qs" id="qs"><div class="qs-ic" aria-hidden="true">${QUICK[i][0]}</div><h2>${esc(QUICK[i][1])}</h2><p class="qs-t">${esc(QUICK[i][2])}</p>
+    <div class="qs-dots" aria-label="Card ${i + 1} of ${QUICK.length}">${QUICK.map((_, j) => `<i class="${j === i ? "on" : ""}"></i>`).join("")}</div>
+    <div class="row" style="justify-content:space-between">${i ? `<button class="btn ghost" id="qsBack">← Back</button>` : `<button class="btn ghost" id="qsSkip">Skip</button>`}${i < QUICK.length - 1 ? `<button class="btn primary" id="qsNext">Next →</button>` : `<button class="btn primary" id="qsDone">Let's go!</button>`}</div>
+    ${i === QUICK.length - 1 ? `<button class="linkbtn" id="qsGuide">Read the full carers' guide</button>` : ""}</div>`, () => {
+    const to = (n) => { if (n >= 0 && n < QUICK.length) { i = n; draw(); } };
+    const on2 = (id, fn) => { const el = $(id); if (el) el.onclick = fn; };
+    on2("#qsNext", () => to(i + 1)); on2("#qsBack", () => to(i - 1)); on2("#qsSkip", closeModal); on2("#qsDone", closeModal);
+    on2("#qsGuide", () => { closeModal(); go({ name: "guide" }); });
+    const box = $("#qs"); let x0 = null;
+    box.addEventListener("touchstart", (e) => { x0 = e.touches[0].clientX; }, { passive: true });
+    box.addEventListener("touchend", (e) => { if (x0 == null) return; const dx = e.changedTouches[0].clientX - x0; x0 = null; if (Math.abs(dx) > 40) to(i + (dx < 0 ? 1 : -1)); });
+  });
+  draw();
+}
+
 /* ---------- home menu: Kids' play, Parents and Set up ---------- */
 // Kids' play is safe to hand over: monsters, shop items, island, games and eggs all work, but nothing can award Dojos,
 // spend treats, delete history or change settings. It survives a reload. Parents needs the PIN and isn't remembered,
 // so a closed app always reopens on the menu (or straight back into Kids' play).
 function setView(v) { S.view = v; lset("hd.view", v === "kids" ? "kids" : "menu"); S.adminPlay = false; S.touchAt = Date.now(); }
 function toMenu() { setView("menu"); closeModal(); go({ name: "home" }); }
-function enterKids() { setView("kids"); go({ name: "home" }); toast("Kids' play: have fun! Nothing can be changed here."); }
+function enterKids() { setView("kids"); go({ name: "home" }); toast("Kids' play: have fun!"); }
 function enterParents(then) { parentPin(() => { setView("parents"); if (then) then(); else go({ name: "home" }); }); }
 // The PIN guards Parents and Set up. With no PIN yet, a parent chooses one first (or skips for now).
 function parentPin(then) {
@@ -2272,7 +2530,7 @@ function viewMenu() {
     ${tile("goParents", "🧑‍🧑‍🧒", "Parents", "Give Dojos, spend treats, see the week and change settings.", true)}
     ${isAdminRole() ? tile("goSetup", "🧭", "Set up", "Answer a few questions to choose behaviours, big rewards and treats.", true) : ""}
     ${tile("goSettings", "⚙️", "Settings", isAdminRole() ? "Children, rewards, games, family invites and backups." : "Your name, this device and signing out.", isAdminRole())}
-    <button class="btn ghost" id="guideBtn" style="justify-self:center">📖 Carers' guide</button></div>`;
+    <div class="row" style="justify-content:center"><button class="btn ghost" id="quickBtn">⚡ Quick start</button><button class="btn ghost" id="guideBtn">📖 Carers' guide</button></div></div>`;
 }
 
 /* ---------- guided setup ---------- */
@@ -2529,7 +2787,7 @@ function wire() {
   if (kid && S.phase === "app") {
     const hm = $("#heroMonster");
     if (hm && $("#peekaboo")) $("#peekaboo").onclick = () => peekaboo(kid);
-    else if (hm) hm.onclick = () => { const ls = monsterLines(kid); monsterSay(kid, ls[Math.floor(Math.random() * ls.length)]); bounce(hm); beep([[880, .12, 0]]); };
+    else if (hm && !hm.closest(".walker")) hm.onclick = () => { const ls = monsterLines(kid); monsterSay(kid, ls[Math.floor(Math.random() * ls.length)]); bounce(hm); beep([[880, .12, 0]]); };
     if (hm && S.greetFor !== kid.id) { S.greetFor = kid.id; const ls = monsterLines(kid); setTimeout(() => monsterSay(kid, `Hi ${kid.name}! ${ls[0]}`, true), 500); }
     v.querySelectorAll("[data-game]").forEach((b) => b.onclick = () => startGame(kid, b.dataset.game));
     v.querySelectorAll("details[data-grp]").forEach((d) => d.ontoggle = () => { const o = S.admOpen || (S.admOpen = new Set()); d.open ? o.add(d.dataset.grp) : o.delete(d.dataset.grp); });
@@ -2557,11 +2815,12 @@ function wire() {
     if (mn) mn.onchange = () => { setMonster(kid, { monsterName: mn.value.trim().slice(0, 24) }); toast("Name saved"); };
     on("#surprise", () => {
       const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-      setMonster(kid, { look: { species: pick(SPECIES)[0], color: pick(COLORS), shape: pick(SHAPES)[0], eyes: pick([1, 2, 3]), top: pick(TOPS)[0], mouth: pick(MOUTHS)[0] } });
+      setMonster(kid, { look: { species: pick(SPECIES)[0], color: pick(COLORS), shape: pick(SHAPES)[0], eyes: pick([1, 2, 3]), top: pick(TOPS)[0], mouth: pick(MOUTHS)[0], eyeStyle: pick(EYESTYLES)[0], brows: pick(BROWS)[0], nose: pick(NOSES)[0], cheeks: pick(CHEEKS)[0], arms: pick(ARMS)[0], belly: pick(BELLIES)[0] } });
       SND.earn(); bounce($("#studioMonster"));
     });
   }
   const gb = $("#guideBtn"); if (gb) gb.onclick = () => go({ name: "guide" });
+  const qb = $("#quickBtn"); if (qb) qb.onclick = showQuickStart;
   const gk = $("#guideBack"); if (gk) gk.onclick = () => go({ name: "home" });
   if (S.route.name === "settings" && S.phase === "app") wireSettings();
   if (S.phase === "app" && S.cfg) wireKidLock();

@@ -101,11 +101,19 @@ const PRICE_TIERS = [[8, "quick", "Quick"], [20, "bit", "Save a bit"], [45, "up"
 function priceTier(cost) { return PRICE_TIERS.find(([max]) => cost <= max); }
 const SLOTS = [["pet", "Pets"], ["hat", "Hats"], ["acc", "Accessories"], ["skin", "Skins"], ["bg", "Backgrounds"]];
 const LEVELS = [0, 25, 75, 150, 300, 500];
-const COLORS = ["#2BB3A3", "#FF6F59", "#7B61FF", "#F5B700", "#4CBF5A", "#3FA7F5", "#FF7EB6", "#FF8A2A", "#E63946", "#8AC926", "#C77DFF", "#6D7A8C"];
+const COLORS = ["#2BB3A3", "#FF6F59", "#7B61FF", "#F5B700", "#4CBF5A", "#3FA7F5", "#FF7EB6", "#FF8A2A", "#E63946", "#8AC926", "#C77DFF", "#6D7A8C", "#5ED3C6", "#FF9AA2", "#9D8CFF", "#FFC75F"];
 const SHAPES = [["round", "Round"], ["tall", "Tall"], ["wide", "Wide"]];
-const TOPS = [["horns", "Horns"], ["ears", "Ears"], ["antenna", "Antennae"], ["none", "None"]];
+const TOPS = [["horns", "Horns"], ["ears", "Ears"], ["antenna", "Antennae"], ["unicorn", "Unicorn horn"], ["bunny", "Bunny ears"], ["mohawk", "Spiky hair"], ["tuft", "Hair tuft"], ["sprout", "Leaf sprout"], ["none", "None"]];
 const SPECIES = [["monster", "Monster"], ["dragon", "Dragon"], ["robot", "Robot"]];
-const MOUTHS = [["smile", "Smile"], ["grin", "Big grin"], ["tongue", "Cheeky"], ["fangs", "Fangs"], ["o", "Wow!"]];
+const MOUTHS = [["smile", "Smile"], ["grin", "Big grin"], ["tongue", "Cheeky"], ["fangs", "Fangs"], ["o", "Wow!"], ["buck", "Buck teeth"], ["wavy", "Silly"], ["smirk", "Smirk"]];
+// More free face and body choices for the Make tab. The first of each list is the default.
+const EYESTYLES = [["round", "Round"], ["sparkle", "Sparkly"], ["happy", "Happy"], ["sleepy", "Sleepy"], ["wink", "Wink"], ["lashes", "Lashes"]];
+const BROWS = [["none", "None"], ["happy", "Happy"], ["cross", "Grumpy"], ["wow", "Surprised"]];
+const NOSES = [["none", "None"], ["button", "Button"], ["snout", "Snout"], ["heart", "Heart"], ["pointy", "Pointy"]];
+const CHEEKS = [["blush", "Blush"], ["freckles", "Freckles"], ["none", "None"]];
+const ARMS = [["nubs", "Little arms"], ["wave", "Waving"], ["mitts", "Big hands"], ["claws", "Claws"], ["wings", "Wings"]];
+const BELLIES = [["patch", "Patch"], ["heart", "Heart"], ["none", "None"]];
+const LOOK_DEFAULTS = { species: "monster", shape: "round", eyes: 2, top: "none", mouth: "smile", eyeStyle: "round", brows: "none", nose: "none", cheeks: "blush", arms: "nubs", belly: "patch" };
 
 /* ---------- monster drawing ---------- */
 let svgN = 0;
@@ -150,6 +158,48 @@ function hatPart(id, t) {
   if (id === "crown") s += `<path d="M70 ${t + 8} L70 ${t - 22} L85 ${t - 8} L100 ${t - 30} L115 ${t - 8} L130 ${t - 22} L130 ${t + 8}Z" fill="#F7C531" stroke="#C9930A" stroke-width="2.5" stroke-linejoin="round"/><circle cx="100" cy="${t - 4}" r="5" fill="#E23B4E"/><circle cx="82" cy="${t}" r="3.5" fill="#3D7BFF"/><circle cx="118" cy="${t}" r="3.5" fill="#3D7BFF"/>`;
   return s;
 }
+// Face and body parts (used by monsterSvg). Each draws in the 200 x 200 monster box.
+function eyesSvg(style, eyes, dark, ink, col) {
+  return eyes.map(([x, y, r], i) => {
+    const ball = `<circle cx="${x}" cy="${y}" r="${r}" fill="#fff" stroke="${dark}" stroke-width="2"/>`;
+    const arc = `<path d="M${x - r * .8} ${y + r * .25} Q${x} ${y - r * .9} ${x + r * .8} ${y + r * .25}" stroke="${ink}" stroke-width="${Math.max(3, r * .32)}" fill="none" stroke-linecap="round"/>`;
+    const plain = ball + `<circle cx="${x + r * 0.12}" cy="${y - r * 0.08}" r="${r * 0.55}" fill="${ink}"/><circle cx="${x + r * 0.3}" cy="${y - r * 0.32}" r="${r * 0.18}" fill="#fff"/>`;
+    if (style === "happy" || (style === "wink" && (eyes.length === 1 || i === eyes.length - 1))) return arc;
+    if (style === "sparkle") return ball + `<circle cx="${x}" cy="${y}" r="${r * 0.7}" fill="${ink}"/><circle cx="${x + r * 0.25}" cy="${y - r * 0.28}" r="${r * 0.26}" fill="#fff"/><circle cx="${x - r * 0.28}" cy="${y + r * 0.3}" r="${r * 0.12}" fill="#fff"/>` + star(x - r * 0.2, y - r * 0.4, r * 0.14, "#fff");
+    if (style === "sleepy") return ball + `<circle cx="${x}" cy="${y + r * 0.3}" r="${r * 0.48}" fill="${ink}"/><path d="M${x - r - 1} ${y + 1} A${r + 1} ${r + 1} 0 0 1 ${x + r + 1} ${y + 1}Z" fill="${col}" stroke="${dark}" stroke-width="2"/>`;
+    if (style === "lashes") return plain + [-0.6, 0, 0.6].map((a) => `<path d="M${x + Math.sin(a) * r} ${y - Math.cos(a) * r} l${Math.sin(a) * r * .45} ${-Math.cos(a) * r * .45}" stroke="${ink}" stroke-width="2.5" stroke-linecap="round"/>`).join("");
+    return plain;
+  }).join("");
+}
+function browsSvg(style, eyes, ink) {
+  if (style === "none") return "";
+  return eyes.map(([x, y, r]) => {
+    const by = y - r * 1.45, w = r * .85, line = (d) => `<path d="${d}" stroke="${ink}" stroke-width="3.8" fill="none" stroke-linecap="round"/>`;
+    if (style === "happy") return line(`M${x - w} ${by} Q${x} ${by - r * .5} ${x + w} ${by}`);
+    if (style === "wow") return line(`M${x - w} ${by - r * .35} Q${x} ${by - r} ${x + w} ${by - r * .35}`);
+    // grumpy: the end nearest the middle of the face dips down
+    const dip = r * .4, inL = x > 100, inR = x < 100;
+    return line(`M${x - w} ${by + (inL ? dip : -dip * .3)} L${x + w} ${by + (inR ? dip : -dip * .3)}`);
+  }).join("");
+}
+function noseSvg(style, y, dark, light) {
+  if (style === "button") return `<ellipse cx="100" cy="${y}" rx="4.5" ry="3.5" fill="${dark}"/>`;
+  if (style === "snout") return `<ellipse cx="100" cy="${y}" rx="11" ry="7" fill="${light}" stroke="${dark}" stroke-width="2"/><ellipse cx="96" cy="${y}" rx="2" ry="2.6" fill="${dark}"/><ellipse cx="104" cy="${y}" rx="2" ry="2.6" fill="${dark}"/>`;
+  if (style === "heart") return `<path d="M100 ${y + 5} C93 ${y} 93 ${y - 5} 97 ${y - 5} C99 ${y - 5} 100 ${y - 3} 100 ${y - 2} C100 ${y - 3} 101 ${y - 5} 103 ${y - 5} C107 ${y - 5} 107 ${y} 100 ${y + 5}Z" fill="#FF5E8A"/>`;
+  if (style === "pointy") return `<path d="M96 ${y - 4} L104 ${y - 4} L100 ${y + 4}Z" fill="${dark}" stroke-linejoin="round"/>`;
+  return "";
+}
+function armsSvg(style, G, col, dark, light) {
+  const lx = 100 - G.rx + 2, rx = 100 + G.rx - 2, ay = G.eye + 42;
+  const arm = (x, a) => `<ellipse cx="${x}" cy="${ay}" rx="12" ry="18" fill="${dark}" transform="rotate(${a} ${x} ${ay})"/>`;
+  if (style === "wings") return [-1, 1].map((sd) => { const x = 100 + sd * G.rx * .55, y = G.top + 26; return `<path d="M${x} ${y + 10} Q${x + sd * 40} ${y - 30} ${x + sd * 36} ${y + 8} Q${x + sd * 28} ${y + 2} ${x + sd * 24} ${y + 14} Q${x + sd * 16} ${y + 6} ${x + sd * 8} ${y + 20}Z" fill="${light}" stroke="${dark}" stroke-width="2" stroke-linejoin="round"/>`; }).join("") + arm(lx, 25) + arm(rx, -25);
+  if (style === "wave") return arm(lx, 25) + `<ellipse cx="${rx + 10}" cy="${ay - 30}" rx="11" ry="20" fill="${dark}" transform="rotate(30 ${rx + 10} ${ay - 30})"/><circle cx="${rx + 20}" cy="${ay - 48}" r="9" fill="${dark}"/>`;
+  let s = arm(lx, 25) + arm(rx, -25);
+  const tip = (x, sd) => ({ x: x - sd * 6, y: ay + 15 });
+  if (style === "mitts") [[lx, -1], [rx, 1]].forEach(([x, sd]) => { const t = tip(x, sd); s += `<circle cx="${t.x}" cy="${t.y}" r="11" fill="${light}" stroke="${dark}" stroke-width="2"/><path d="M${t.x + sd * 5} ${t.y - 6} q${sd * 6} 2 ${sd * 4} 8" stroke="${dark}" stroke-width="2" fill="none"/>`; });
+  if (style === "claws") [[lx, -1], [rx, 1]].forEach(([x, sd]) => { const t = tip(x, sd); s += [-5, 0, 5].map((d) => `<path d="M${t.x + d - 2} ${t.y + 1} L${t.x + d} ${t.y + 9} L${t.x + d + 2} ${t.y + 1}Z" fill="#fff" stroke="${dark}" stroke-width="1"/>`).join(""); });
+  return s;
+}
 function monsterSvg(look, equip, level) {
   look = look || {}; equip = equip || {};
   const sp = look.species || "monster", gid = "m" + (++svgN), G = sp === "robot" ? GEO.robot : (GEO[look.shape] || GEO.round), col = look.color || COLORS[0];
@@ -175,16 +225,22 @@ function monsterSvg(look, equip, level) {
   }
   if (sp !== "robot" && look.top === "horns") s += `<path d="M72 ${G.top + 14} Q60 ${G.top - 16} 76 ${G.top - 24} Q74 ${G.top - 6} 88 ${G.top + 6}Z" fill="#FFF1C9" stroke="${dark}" stroke-width="2"/><path d="M128 ${G.top + 14} Q140 ${G.top - 16} 124 ${G.top - 24} Q126 ${G.top - 6} 112 ${G.top + 6}Z" fill="#FFF1C9" stroke="${dark}" stroke-width="2"/>`;
   if (sp !== "robot" && look.top === "ears") s += `<circle cx="66" cy="${G.top + 12}" r="16" fill="${col}"/><circle cx="66" cy="${G.top + 12}" r="8" fill="${light}"/><circle cx="134" cy="${G.top + 12}" r="16" fill="${col}"/><circle cx="134" cy="${G.top + 12}" r="8" fill="${light}"/>`;
+  if (sp !== "robot" && look.top === "unicorn") s += `<path d="M91 ${G.top + 8} L100 ${G.top - 36} L109 ${G.top + 8}Z" fill="#FFE680" stroke="#E0A800" stroke-width="2" stroke-linejoin="round"/><path d="M94 ${G.top - 2} L106 ${G.top - 8} M96 ${G.top - 14} L104 ${G.top - 19}" stroke="#E0A800" stroke-width="2"/>`;
+  if (sp !== "robot" && look.top === "bunny") s += `<ellipse cx="82" cy="${G.top - 14}" rx="10" ry="28" fill="${col}" transform="rotate(-10 82 ${G.top - 14})"/><ellipse cx="82" cy="${G.top - 12}" rx="5" ry="19" fill="#FFB7CF" transform="rotate(-10 82 ${G.top - 12})"/><ellipse cx="118" cy="${G.top - 14}" rx="10" ry="28" fill="${col}" transform="rotate(10 118 ${G.top - 14})"/><ellipse cx="118" cy="${G.top - 12}" rx="5" ry="19" fill="#FFB7CF" transform="rotate(10 118 ${G.top - 12})"/>`;
+  if (sp !== "robot" && look.top === "mohawk") s += `<path d="M78 ${G.top + 10} L82 ${G.top - 14} L90 ${G.top + 2} L96 ${G.top - 22} L102 ${G.top} L108 ${G.top - 20} L114 ${G.top + 2} L120 ${G.top - 12} L124 ${G.top + 10}Z" fill="${dark}"/>`;
+  if (sp !== "robot" && look.top === "tuft") s += `<path d="M92 ${G.top + 6} Q86 ${G.top - 18} 96 ${G.top - 22} M100 ${G.top + 4} Q100 ${G.top - 26} 110 ${G.top - 26} M106 ${G.top + 6} Q114 ${G.top - 12} 120 ${G.top - 10}" stroke="${dark}" stroke-width="5" stroke-linecap="round" fill="none"/>`;
+  if (sp !== "robot" && look.top === "sprout") s += `<path d="M100 ${G.top + 6} V${G.top - 16}" stroke="#3E8E41" stroke-width="4" stroke-linecap="round"/><path d="M100 ${G.top - 14} Q84 ${G.top - 30} 78 ${G.top - 16} Q90 ${G.top - 8} 100 ${G.top - 14}Z" fill="#5CC260"/><path d="M100 ${G.top - 16} Q116 ${G.top - 34} 124 ${G.top - 20} Q112 ${G.top - 10} 100 ${G.top - 16}Z" fill="#7DDA6A"/>`;
   if (sp !== "robot" && look.top === "antenna") s += `<path d="M88 ${G.top + 6} L78 ${G.top - 22}M112 ${G.top + 6} L122 ${G.top - 22}" stroke="${dark}" stroke-width="4" stroke-linecap="round"/><circle cx="78" cy="${G.top - 24}" r="7" fill="${light}"/><circle cx="122" cy="${G.top - 24}" r="7" fill="${light}"/>`;
   // arms and feet
   if (sp === "robot") s += `<rect x="30" y="${G.eye + 30}" width="22" height="12" rx="6" fill="${dark}"/><rect x="148" y="${G.eye + 30}" width="22" height="12" rx="6" fill="${dark}"/><rect x="66" y="${G.bot - 4}" width="26" height="12" rx="4" fill="${dark}"/><rect x="108" y="${G.bot - 4}" width="26" height="12" rx="4" fill="${dark}"/>`;
-  else s += `<ellipse cx="${100 - G.rx + 2}" cy="${G.eye + 42}" rx="12" ry="18" fill="${dark}" transform="rotate(25 ${100 - G.rx + 2} ${G.eye + 42})"/><ellipse cx="${100 + G.rx - 2}" cy="${G.eye + 42}" rx="12" ry="18" fill="${dark}" transform="rotate(-25 ${100 + G.rx - 2} ${G.eye + 42})"/>`;
+  else s += armsSvg(look.arms || "nubs", G, col, dark, light);
   if (sp !== "robot") s += `<ellipse cx="78" cy="${G.bot}" rx="16" ry="9" fill="${dark}"/><ellipse cx="122" cy="${G.bot}" rx="16" ry="9" fill="${dark}"/>`;
   // body + skin
   s += G.body(equip.skin === "gold" ? `url(#${gid}g)` : col);
   s += `<g clip-path="url(#${gid}c)">`;
   if (sp === "robot") s += `<rect x="72" y="${G.mouth + 18}" width="56" height="24" rx="6" fill="#fff" opacity=".35"/><circle cx="84" cy="${G.mouth + 30}" r="5" fill="#FF5E5E"/><circle cx="100" cy="${G.mouth + 30}" r="5" fill="#FFD43B"/><circle cx="116" cy="${G.mouth + 30}" r="5" fill="#4CBF5A"/>`;
-  else s += `<ellipse cx="100" cy="${G.mouth + 34}" rx="${G.rx * 0.6}" ry="30" fill="#fff" opacity=".28"/>`;
+  else if ((look.belly || "patch") === "patch") s += `<ellipse cx="100" cy="${G.mouth + 34}" rx="${G.rx * 0.6}" ry="30" fill="#fff" opacity=".28"/>`;
+  else if (look.belly === "heart") { const hy = G.mouth + 30; s += `<path d="M100 ${hy + 18} C80 ${hy + 4} 80 ${hy - 12} 92 ${hy - 12} C97 ${hy - 12} 100 ${hy - 8} 100 ${hy - 4} C100 ${hy - 8} 103 ${hy - 12} 108 ${hy - 12} C120 ${hy - 12} 120 ${hy + 4} 100 ${hy + 18}Z" fill="#fff" opacity=".35"/>`; }
   if (sp === "dragon") for (let y = G.mouth + 14; y < G.bot; y += 10) s += `<path d="M${100 - G.rx * 0.45} ${y} Q100 ${y + 5} ${100 + G.rx * 0.45} ${y}" stroke="${dark}" stroke-width="2" fill="none" opacity=".35"/>`;
   if (level >= 2) s += `<circle cx="${100 - G.rx * 0.6}" cy="${G.top + 30}" r="7" fill="${dark}" opacity=".3"/><circle cx="${100 + G.rx * 0.62}" cy="${G.top + 40}" r="5" fill="${dark}" opacity=".3"/><circle cx="${100 + G.rx * 0.5}" cy="${G.bot - 30}" r="6" fill="${dark}" opacity=".3"/>`;
   if (equip.skin === "stripes") for (let y = G.top + 8; y < G.bot; y += 20) s += `<rect x="0" y="${y}" width="200" height="8" fill="${dark}" opacity=".3"/>`;
@@ -195,13 +251,18 @@ function monsterSvg(look, equip, level) {
   if (equip.skin === "gold") s += star(68, G.top + 30, 6, "#fff", .8) + star(134, G.bot - 34, 5, "#fff", .8);
   s += `</g>`;
   // face
-  s += `<ellipse cx="70" cy="${G.mouth - 4}" rx="9" ry="6" fill="#FF7FA0" opacity=".45"/><ellipse cx="130" cy="${G.mouth - 4}" rx="9" ry="6" fill="#FF7FA0" opacity=".45"/>`;
-  s += `<g class="blink">`;
-  for (const [x, y, r] of eyes) s += `<circle cx="${x}" cy="${y}" r="${r}" fill="#fff" stroke="${dark}" stroke-width="2"/><circle cx="${x + r * 0.12}" cy="${y - r * 0.08}" r="${r * 0.55}" fill="${ink}"/><circle cx="${x + r * 0.3}" cy="${y - r * 0.32}" r="${r * 0.18}" fill="#fff"/>`;
-  s += `</g>`;
+  const ck = look.cheeks || "blush";
+  if (ck === "blush") s += `<ellipse cx="70" cy="${G.mouth - 4}" rx="9" ry="6" fill="#FF7FA0" opacity=".45"/><ellipse cx="130" cy="${G.mouth - 4}" rx="9" ry="6" fill="#FF7FA0" opacity=".45"/>`;
+  if (ck === "freckles") for (const cx of [70, 130]) s += [[-5, -2], [0, 2], [5, -2]].map(([dx, dy]) => `<circle cx="${cx + dx}" cy="${G.mouth - 4 + dy}" r="1.8" fill="${dark}" opacity=".7"/>`).join("");
+  s += `<g class="blink">${eyesSvg(look.eyeStyle || "round", eyes, dark, ink, col)}</g>`;
+  s += browsSvg(look.brows || "none", eyes, ink);
+  s += noseSvg(look.nose || "none", G.mouth - 7, dark, light);
   const m = G.mouth, mo = look.mouth || "smile";
   if (mo === "grin") s += `<path d="M76 ${m - 2} Q100 ${m + 28} 124 ${m - 2} Z" fill="${ink}"/><path d="M80 ${m} H120 L118 ${m + 6} H82Z" fill="#fff"/>`;
   else if (mo === "o") s += `<ellipse cx="100" cy="${m + 6}" rx="9" ry="11" fill="${ink}"/><ellipse cx="100" cy="${m + 11}" rx="5" ry="4" fill="#FF7FA0"/>`;
+  else if (mo === "buck") s += `<path d="M82 ${m} Q100 ${m + 18} 118 ${m} Z" fill="${ink}"/><rect x="93" y="${m}" width="7" height="10" rx="1.5" fill="#fff"/><rect x="100.5" y="${m}" width="7" height="10" rx="1.5" fill="#fff"/>`;
+  else if (mo === "wavy") s += `<path d="M80 ${m + 4} Q86 ${m - 2} 92 ${m + 4} T104 ${m + 4} T116 ${m + 4} T122 ${m + 2}" stroke="${ink}" stroke-width="4" fill="none" stroke-linecap="round"/><path d="M104 ${m + 5} Q108 ${m + 16} 113 ${m + 5}Z" fill="#FF7FA0"/>`;
+  else if (mo === "smirk") s += `<path d="M86 ${m + 6} Q104 ${m + 12} 118 ${m - 2}" stroke="${ink}" stroke-width="4.5" fill="none" stroke-linecap="round"/>`;
   else {
     s += `<path d="M84 ${m} Q100 ${m + 20} 116 ${m} Z" fill="${ink}"/>`;
     if (mo === "tongue") s += `<path d="M95 ${m + 8} Q100 ${m + 22} 108 ${m + 8} Z" fill="#FF7FA0"/>`;
@@ -419,5 +480,5 @@ function houseSvg(o) {
   return s + `</g></svg>`;
 }
 
-window.HD = { star, LIB, BONUS, SHOP, PRICE_TIERS, priceTier, FURNI_ART, furniCloseup, SLOTS, LEVELS, COLORS, SHAPES, TOPS, SPECIES, MOUTHS, monsterSvg, shade, trophySvg, medalSvg, badgeSvg, HOUSE, FURNI, houseTier, houseSvg, houseOutsideSvg, hatPart, accIcon, petSvg, PET_IDS };
+window.HD = { star, LIB, BONUS, SHOP, PRICE_TIERS, priceTier, FURNI_ART, furniCloseup, SLOTS, LEVELS, COLORS, SHAPES, TOPS, SPECIES, MOUTHS, EYESTYLES, BROWS, NOSES, CHEEKS, ARMS, BELLIES, LOOK_DEFAULTS, monsterSvg, shade, trophySvg, medalSvg, badgeSvg, HOUSE, FURNI, houseTier, houseSvg, houseOutsideSvg, hatPart, accIcon, petSvg, PET_IDS };
 })();

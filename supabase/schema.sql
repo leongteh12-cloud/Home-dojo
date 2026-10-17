@@ -45,6 +45,9 @@ create table if not exists public.awards (
   primary key (family_id, id)
 );
 create index if not exists awards_family_at on public.awards (family_id, at);
+-- Notes from grown-ups to a child's mailbox are kept with the awards (kind 'note').
+alter table public.awards drop constraint if exists awards_kind_check;
+alter table public.awards add constraint awards_kind_check check (kind in ('earn', 'buy', 'spend', 'given', 'note'));
 
 create table if not exists public.invites (
   code text primary key,
@@ -100,7 +103,7 @@ create policy "members read awards" on public.awards for select using (public.is
 drop policy if exists "members add awards" on public.awards;
 create policy "members add awards" on public.awards for insert with check (
   public.is_member(family_id) and by = auth.uid()
-  and (kind in ('earn', 'buy') or public.is_admin(family_id))
+  and (kind in ('earn', 'buy', 'note') or public.is_admin(family_id))
 );
 drop policy if exists "admins delete or quick undo" on public.awards;
 create policy "admins delete or quick undo" on public.awards for delete using (
@@ -158,14 +161,14 @@ begin
   update family_config set config = cfg, updated_at = now(), updated_by = auth.uid() where family_id = p_family;
 end $$;
 
--- Let any member change a monster: its look, outfit, name, trophy shelf, hatched eggs, game scores and island (nothing else).
+-- Let any member change a monster: its look, outfit, name, trophy shelf, hatched eggs, game scores, island and yard (nothing else).
 create or replace function public.set_monster(p_family uuid, p_kid text, p_patch jsonb) returns void
 language plpgsql security definer set search_path = public as $$
 declare cfg jsonb; i int; allowed jsonb;
 begin
   if not public.is_member(p_family) then raise exception 'Not a member of this family'; end if;
   select coalesce(jsonb_object_agg(key, value), '{}'::jsonb) into allowed
-    from jsonb_each(p_patch) where key in ('look', 'equip', 'monsterName', 'shelf', 'eggs', 'plays', 'best', 'island');
+    from jsonb_each(p_patch) where key in ('look', 'equip', 'monsterName', 'shelf', 'eggs', 'plays', 'best', 'island', 'yard');
   select config into cfg from family_config where family_id = p_family for update;
   if cfg is null then return; end if;
   for i in 0 .. jsonb_array_length(cfg->'kids') - 1 loop
@@ -195,7 +198,7 @@ begin
   select r->>'id', p_family, r->>'kid', r->>'kind', r->>'label', r->>'icon', r->>'bid', r->>'item', r->>'mid',
          coalesce((r->>'pts')::int, 0), (r->>'at')::bigint, coalesce(nullif(r->>'by', '')::uuid, auth.uid())
   from jsonb_array_elements(p_rows) r
-  where r->>'id' is not null and r->>'kind' in ('earn', 'buy', 'spend', 'given')
+  where r->>'id' is not null and r->>'kind' in ('earn', 'buy', 'spend', 'given', 'note')
   on conflict (family_id, id) do nothing;
   get diagnostics n = row_count;
   return n;
