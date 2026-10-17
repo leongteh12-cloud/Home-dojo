@@ -219,3 +219,46 @@ do $$ begin
   begin alter publication supabase_realtime add table public.family_config; exception when duplicate_object then null; end;
   begin alter publication supabase_realtime add table public.members; exception when duplicate_object then null; end;
 end $$;
+
+-- Feedback: anyone signed in can send it; only the app owner can read it all.
+-- To make yourself the owner, run this once (with your own email):
+--   insert into public.app_owners select id from auth.users where email = 'you@example.com' on conflict do nothing;
+create table if not exists public.app_owners (
+  user_id uuid primary key references auth.users on delete cascade
+);
+alter table public.app_owners enable row level security;
+
+create table if not exists public.feedback (
+  id bigint generated always as identity primary key,
+  user_id uuid default auth.uid() references auth.users on delete set null,
+  family_id uuid references public.families on delete set null,
+  from_name text not null default '',
+  family_name text not null default '',
+  kind text not null default 'other' check (kind in ('bug', 'idea', 'love', 'other')),
+  body text not null check (char_length(body) between 1 and 4000),
+  screen text not null default '',
+  version text not null default '',
+  device text not null default '',
+  status text not null default 'new' check (status in ('new', 'seen', 'done')),
+  created_at timestamptz not null default now()
+);
+alter table public.feedback enable row level security;
+
+create or replace function public.is_app_owner() returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from app_owners where user_id = auth.uid());
+$$;
+grant execute on function public.is_app_owner() to authenticated;
+
+drop policy if exists "send feedback" on public.feedback;
+create policy "send feedback" on public.feedback for insert to authenticated
+  with check (user_id = auth.uid() and (family_id is null or public.is_member(family_id)));
+drop policy if exists "read feedback" on public.feedback;
+create policy "read feedback" on public.feedback for select to authenticated
+  using (user_id = auth.uid() or public.is_app_owner());
+drop policy if exists "update feedback" on public.feedback;
+create policy "update feedback" on public.feedback for update to authenticated
+  using (public.is_app_owner()) with check (public.is_app_owner());
+drop policy if exists "delete feedback" on public.feedback;
+create policy "delete feedback" on public.feedback for delete to authenticated
+  using (public.is_app_owner());

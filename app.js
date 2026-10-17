@@ -107,6 +107,7 @@ async function openFamily(f) {
   subscribe();
   await refreshAll();
   flush();
+  checkOwner();
 }
 
 function teardown() {
@@ -420,6 +421,81 @@ function modal(html, wire) {
   $("#ovbg").onclick = (e) => { if (e.target.id === "ovbg") closeModal(); };
   if (wire) wire(ov);
   const f = ov.querySelector("[data-autofocus]") || ov.querySelector("button"); if (f) f.focus();
+}
+/* ---------- feedback ---------- */
+// Anyone signed in can send feedback; only the app owner (listed in app_owners in Supabase) can read it all.
+const FB_KINDS = [["bug", "🐞", "Something's not working", "What happened? What did you expect to happen?"], ["idea", "💡", "An idea", "What would make the app better for your family?"], ["love", "❤️", "Something I love", "What's working well?"], ["other", "💬", "Something else", "Tell us anything."]];
+async function checkOwner() {
+  if (S.mode !== "cloud" || !sb) return;
+  try { const r = await sb.rpc("is_app_owner"); S.owner = !r.error && r.data === true; if (S.owner) countFeedback(); } catch (e) { S.owner = false; }
+}
+async function countFeedback() {
+  const r = await sb.from("feedback").select("id", { count: "exact", head: true }).eq("status", "new");
+  if (!r.error) { S.fbNew = r.count || 0; if (S.route.name === "settings") render(); }
+}
+function fbDetails() {
+  const ua = navigator.userAgent, os = /Android/.test(ua) ? "Android" : /iPhone|iPad/.test(ua) ? "iPhone/iPad" : /Windows/.test(ua) ? "Windows" : /Mac/.test(ua) ? "Mac" : "Other";
+  const app = matchMedia("(display-mode: standalone)").matches ? "installed app" : "browser";
+  return { screen: S.route.name || "", version: lget("hd.seenVersion", "") || "", device: `${os}, ${app}, ${innerWidth}×${innerHeight}` };
+}
+function showFeedback() {
+  let kind = "bug";
+  const me = S.members && S.user && S.members.find((m) => m.user_id === S.user.id);
+  const draw = (text) => {
+    const k = FB_KINDS.find((x) => x[0] === kind);
+    modal(`<h2>Send feedback</h2><p class="meta">This app is still growing. Tell us what's broken, what's confusing and what you'd love to see.</p>
+      <div class="fbkinds">${FB_KINDS.map(([id, ic, t]) => `<button class="fbkind${id === kind ? " on" : ""}" data-fbk="${id}" aria-pressed="${id === kind}"><span aria-hidden="true">${ic}</span>${t}</button>`).join("")}</div>
+      <label class="field">Your message<textarea id="fbText" rows="5" maxlength="4000" placeholder="${esc(k[3])}" data-autofocus>${esc(text || "")}</textarea></label>
+      <label class="fbinfo"><input type="checkbox" id="fbInfo" checked> Include which screen I'm on and my device type</label>
+      ${S.mode === "cloud" ? `<p class="meta" style="margin:0">Sent as ${esc((me && me.display_name) || "you")}${S.family ? ` from ${esc(S.family.name)}` : ""}, so we can follow up.</p>` : `<p class="meta" style="margin:0">You're in try-it-out mode, so this can't be sent from here. Tap Copy and send it to whoever shared the app with you.</p>`}
+      <div class="row" style="justify-content:center"><button class="btn ghost" id="fbCancel">Cancel</button><button class="btn primary" id="fbSend">${S.mode === "cloud" ? "Send" : "Copy"}</button></div>`, () => {
+      const ta = $("#fbText");
+      document.querySelectorAll("[data-fbk]").forEach((b) => b.onclick = () => { kind = b.dataset.fbk; draw(ta.value); });
+      $("#fbCancel").onclick = closeModal;
+      $("#fbSend").onclick = async () => {
+        const body = ta.value.trim();
+        if (!body) { toast("Write a few words first."); return ta.focus(); }
+        const det = $("#fbInfo").checked ? fbDetails() : { screen: "", version: "", device: "" };
+        if (S.mode !== "cloud") {
+          const txt = `Home Dojo feedback (${FB_KINDS.find((x) => x[0] === kind)[2]}):\n${body}${det.device ? `\n\n[${det.screen} · ${det.version} · ${det.device}]` : ""}`;
+          try { await navigator.clipboard.writeText(txt); toast("Copied. Paste it into a message to send it."); closeModal(); } catch (e) { ta.value = txt; ta.select(); toast("Select all and copy it to send."); }
+          return;
+        }
+        const btn = $("#fbSend"); btn.disabled = true; btn.textContent = "Sending…";
+        const r = await sb.from("feedback").insert(Object.assign({ kind, body, from_name: (me && me.display_name) || "", family_name: S.family ? S.family.name || "" : "", family_id: S.family ? S.family.id : null }, det));
+        if (r.error) { btn.disabled = false; btn.textContent = "Send"; toast(/feedback/.test(r.error.message) ? "Feedback isn't switched on yet. Please tell the person who shared the app." : "Couldn't send it. Check your connection and try again."); return; }
+        closeModal(); toast("Thank you! Your feedback was sent."); SND.earn();
+      };
+    });
+  };
+  draw("");
+}
+async function showFeedbackInbox(filter) {
+  filter = filter || "open";
+  let q = sb.from("feedback").select("id, kind, body, from_name, screen, version, device, status, created_at, family_name").order("created_at", { ascending: false }).limit(200);
+  if (filter === "open") q = q.neq("status", "done");
+  const r = await q;
+  if (r.error) return toast("Couldn't load feedback: " + r.error.message);
+  const rows = r.data || [];
+  const when = (t) => new Date(t).toLocaleString([], { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+  modal(`<h2>Feedback inbox</h2>
+    <div class="seg" style="justify-content:center"><button data-fbf="open" aria-pressed="${filter === "open"}">To do</button><button data-fbf="all" aria-pressed="${filter === "all"}">Everything</button></div>
+    <div class="fblist">${rows.length ? rows.map((f) => { const k = FB_KINDS.find((x) => x[0] === f.kind) || FB_KINDS[3]; return `<div class="fbitem${f.status === "new" ? " new" : ""}${f.status === "done" ? " done" : ""}">
+      <div class="meta"><span aria-hidden="true">${k[1]}</span> <b>${esc(k[2])}</b> · ${esc(f.from_name || "Someone")}${f.family_name ? ` (${esc(f.family_name)})` : ""} · ${when(f.created_at)}</div>
+      <p>${esc(f.body).replace(/\n/g, "<br>")}</p>
+      ${f.device || f.screen ? `<div class="meta" style="font-size:12px">${esc([f.screen, f.version, f.device].filter(Boolean).join(" · "))}</div>` : ""}
+      <div class="row">${f.status !== "done" ? `<button class="btn small" data-fbdone="${f.id}">✓ Done</button>` : `<button class="btn small ghost" data-fbopen="${f.id}">Reopen</button>`}<button class="btn small ghost" data-fbdel="${f.id}">Delete</button></div></div>`; }).join("") : `<p class="meta">${filter === "open" ? "Nothing to do. All caught up!" : "No feedback yet."}</p>`}</div>
+    <div class="row" style="justify-content:center"><button class="btn primary" id="fbClose">Close</button></div>`, () => {
+    $("#fbClose").onclick = closeModal;
+    document.querySelectorAll("[data-fbf]").forEach((b) => b.onclick = () => showFeedbackInbox(b.dataset.fbf));
+    const set = async (id, status) => { await sb.from("feedback").update({ status }).eq("id", id); showFeedbackInbox(filter); };
+    document.querySelectorAll("[data-fbdone]").forEach((b) => b.onclick = () => set(b.dataset.fbdone, "done"));
+    document.querySelectorAll("[data-fbopen]").forEach((b) => b.onclick = () => set(b.dataset.fbopen, "seen"));
+    document.querySelectorAll("[data-fbdel]").forEach((b) => b.onclick = async () => { await sb.from("feedback").delete().eq("id", b.dataset.fbdel); showFeedbackInbox(filter); });
+  });
+  // Opening the inbox marks new items as seen.
+  const fresh = rows.filter((f) => f.status === "new").map((f) => f.id);
+  if (fresh.length) { await sb.from("feedback").update({ status: "seen" }).in("id", fresh); S.fbNew = 0; }
 }
 function closeModal() { $("#overlay").innerHTML = ""; }
 function confirmBox(title, text, yes, onYes) {
@@ -1957,7 +2033,7 @@ function viewHome() {
     </button>`;
   }).join("")}</div>
   <div class="list" style="margin-top:18px">
-  ${kidsMode() ? "" : `<div class="row"><button class="btn ghost" id="quickBtn">⚡ Quick start</button><button class="btn ghost" id="guideBtn">📖 Carers' guide: how and when to give Dojos</button></div>`}
+  ${kidsMode() ? "" : `<div class="row"><button class="btn ghost" id="quickBtn">⚡ Quick start</button><button class="btn ghost" id="guideBtn">📖 Carers' guide: how and when to give Dojos</button><button class="btn ghost" id="fbBtn">💬 Feedback</button></div>`}
   ${nudge ? `<div class="note row" style="justify-content:space-between"><span>It's been a while since your last backup.</span><button class="btn small primary" id="nudgeBackup">Back up now</button></div>` : ""}
   ${S.mode === "local" && !HOST ? `<p class="note">Try-it-out mode: points are saved on this device only.</p>` : ""}
   ${installHelp()}</div>`;
@@ -2126,7 +2202,7 @@ function deviceCard() {
   if (HOST) return "";
   return `<section class="card"><h3 style="font-size:19px">This device</h3>${installHelp() || `<p class="meta" style="margin:0">Installed on this device.</p>`}
     <label class="row" style="gap:8px"><input type="checkbox" id="muteDev" ${lget("hd.mute", false) ? "checked" : ""}> Mute sounds on this device</label>
-    <button class="btn small" id="newsBtn">✨ What's new</button>
+    <div class="row"><button class="btn small" id="newsBtn">✨ What's new</button><button class="btn small" id="fbBtn">💬 Send feedback</button>${S.owner ? `<button class="btn small primary" id="fbInbox">📥 Feedback inbox${S.fbNew ? ` (${S.fbNew} new)` : ""}</button>` : ""}</div>
     ${S.mode === "cloud" ? `<button class="btn small ghost" id="signOutBtn">Sign out</button>` : HOST ? "" : `<button class="btn small ghost" id="leaveLocal">Leave try-it-out mode</button>`}</section>`;
 }
 function viewFamilyPanel() { return famCard() + backupCard() + deviceCard(); }
@@ -2535,7 +2611,7 @@ function viewMenu() {
     ${tile("goParents", "🧑‍🧑‍🧒", "Parents", "Give Dojos, spend treats, see the week and change settings.", true)}
     ${isAdminRole() ? tile("goSetup", "🧭", "Set up", "Answer a few questions to choose behaviours, big rewards and treats.", true) : ""}
     ${tile("goSettings", "⚙️", "Settings", isAdminRole() ? "Children, rewards, games, family invites and backups." : "Your name, this device and signing out.", isAdminRole())}
-    <div class="row" style="justify-content:center"><button class="btn ghost" id="quickBtn">⚡ Quick start</button><button class="btn ghost" id="guideBtn">📖 Carers' guide</button></div></div>`;
+    <div class="row" style="justify-content:center"><button class="btn ghost" id="quickBtn">⚡ Quick start</button><button class="btn ghost" id="guideBtn">📖 Carers' guide</button><button class="btn ghost" id="fbBtn">💬 Feedback</button></div></div>`;
 }
 
 /* ---------- guided setup ---------- */
@@ -2826,6 +2902,8 @@ function wire() {
   }
   const gb = $("#guideBtn"); if (gb) gb.onclick = () => go({ name: "guide" });
   const qb = $("#quickBtn"); if (qb) qb.onclick = showQuickStart;
+  const fbb = $("#fbBtn"); if (fbb) fbb.onclick = showFeedback;
+  const fbi = $("#fbInbox"); if (fbi) fbi.onclick = () => showFeedbackInbox();
   const gk = $("#guideBack"); if (gk) gk.onclick = () => go({ name: "home" });
   if (S.route.name === "settings" && S.phase === "app") wireSettings();
   if (S.phase === "app" && S.cfg) wireKidLock();
