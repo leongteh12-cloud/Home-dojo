@@ -207,6 +207,9 @@ function monsterSvg(look, equip, level) {
   const eyes = eyePos(look.eyes || 2, G.eye), mid = (G.top + G.bot) / 2;
   let s = `<svg viewBox="0 0 200 200" role="img" aria-hidden="true"><defs><clipPath id="${gid}c">${G.body("#000")}</clipPath>`;
   s += `<radialGradient id="${gid}a"><stop offset="0" stop-color="${light}" stop-opacity=".9"/><stop offset="1" stop-color="${light}" stop-opacity="0"/></radialGradient>`;
+  // Soft shading: lit from the top left, a touch darker round the bottom edge.
+  s += `<radialGradient id="${gid}b" cx=".36" cy=".3" r=".85"><stop offset="0" stop-color="${shade(col, .28)}"/><stop offset=".5" stop-color="${col}"/><stop offset="1" stop-color="${shade(col, -.14)}"/></radialGradient>`;
+  s += `<linearGradient id="${gid}l" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${shade(col, -.12)}"/><stop offset="1" stop-color="${shade(col, -.34)}"/></linearGradient>`;
   s += `<linearGradient id="${gid}g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFE680"/><stop offset=".5" stop-color="#F2B705"/><stop offset="1" stop-color="#FFD84D"/></linearGradient>`;
   s += `<linearGradient id="${gid}r" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FF5E5E"/><stop offset=".25" stop-color="#FFB13B"/><stop offset=".5" stop-color="#FFE14D"/><stop offset=".75" stop-color="#58D36B"/><stop offset="1" stop-color="#4DA6FF"/></linearGradient></defs>`;
   if (equip.bg) s += bgSvg(equip.bg, gid);
@@ -234,9 +237,9 @@ function monsterSvg(look, equip, level) {
   // arms and feet
   if (sp === "robot") s += `<rect x="30" y="${G.eye + 30}" width="22" height="12" rx="6" fill="${dark}"/><rect x="148" y="${G.eye + 30}" width="22" height="12" rx="6" fill="${dark}"/><rect x="66" y="${G.bot - 4}" width="26" height="12" rx="4" fill="${dark}"/><rect x="108" y="${G.bot - 4}" width="26" height="12" rx="4" fill="${dark}"/>`;
   else s += armsSvg(look.arms || "nubs", G, col, dark, light);
-  if (sp !== "robot") s += `<ellipse cx="78" cy="${G.bot}" rx="16" ry="9" fill="${dark}"/><ellipse cx="122" cy="${G.bot}" rx="16" ry="9" fill="${dark}"/>`;
+  if (sp !== "robot") s += `<ellipse cx="78" cy="${G.bot}" rx="16" ry="9" fill="url(#${gid}l)"/><ellipse cx="122" cy="${G.bot}" rx="16" ry="9" fill="url(#${gid}l)"/><ellipse cx="74" cy="${G.bot - 3}" rx="6" ry="2.5" fill="#fff" opacity=".25"/><ellipse cx="118" cy="${G.bot - 3}" rx="6" ry="2.5" fill="#fff" opacity=".25"/>`;
   // body + skin
-  s += G.body(equip.skin === "gold" ? `url(#${gid}g)` : col);
+  s += G.body(equip.skin === "gold" ? `url(#${gid}g)` : `url(#${gid}b)`);
   s += `<g clip-path="url(#${gid}c)">`;
   if (sp === "robot") s += `<rect x="72" y="${G.mouth + 18}" width="56" height="24" rx="6" fill="#fff" opacity=".35"/><circle cx="84" cy="${G.mouth + 30}" r="5" fill="#FF5E5E"/><circle cx="100" cy="${G.mouth + 30}" r="5" fill="#FFD43B"/><circle cx="116" cy="${G.mouth + 30}" r="5" fill="#4CBF5A"/>`;
   else if ((look.belly || "patch") === "patch") s += `<ellipse cx="100" cy="${G.mouth + 34}" rx="${G.rx * 0.6}" ry="30" fill="#fff" opacity=".28"/>`;
@@ -249,7 +252,10 @@ function monsterSvg(look, equip, level) {
   if (equip.skin === "spots") s += [[72, 22, 9], [128, 30, 7], [58, 58, 6], [142, 64, 9], [86, 76, 6], [118, 88, 8], [70, 98, 7]].map(([x, dy, r]) => `<circle cx="${x}" cy="${G.top + dy}" r="${r}" fill="${dark}" opacity=".35"/>`).join("");
   if (equip.skin === "galaxy") s += `<rect x="0" y="${G.top - 10}" width="200" height="${G.bot - G.top + 20}" fill="#2A1A6E" opacity=".78"/><ellipse cx="100" cy="${mid}" rx="${G.rx}" ry="16" fill="#C77DFF" opacity=".35" transform="rotate(-20 100 ${mid})"/>` + [[66, 20, 4], [130, 28, 5], [84, 56, 3], [148, 70, 3.5], [60, 82, 4.5], [118, 96, 3], [96, 34, 2.5]].map(([x, dy, r]) => star(x, G.top + dy, r, "#FFFFFF", .9)).join("") + `<circle cx="138" cy="${G.top + 48}" r="6" fill="#FF8A5B" opacity=".9"/>`;
   if (equip.skin === "gold") s += star(68, G.top + 30, 6, "#fff", .8) + star(134, G.bot - 34, 5, "#fff", .8);
+  // a soft shine on the top left, and a gentle outline
+  s += `<ellipse cx="${100 - G.rx * .42}" cy="${G.top + 24}" rx="${G.rx * .2}" ry="10" fill="#fff" opacity=".28" transform="rotate(-30 ${100 - G.rx * .42} ${G.top + 24})"/>`;
   s += `</g>`;
+  s += G.body("none").replace('fill="none"', `fill="none" stroke="${equip.skin === "gold" ? "#C99A06" : equip.skin === "galaxy" ? "#1B1046" : shade(col, -.32)}" stroke-width="2.5"`);
   // face
   const ck = look.cheeks || "blush";
   if (ck === "blush") s += `<ellipse cx="70" cy="${G.mouth - 4}" rx="9" ry="6" fill="#FF7FA0" opacity=".45"/><ellipse cx="130" cy="${G.mouth - 4}" rx="9" ry="6" fill="#FF7FA0" opacity=".45"/>`;
