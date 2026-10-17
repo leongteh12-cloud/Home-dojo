@@ -643,3 +643,13 @@ h2 .streak { font-size: 13px; margin-left: 4px; }
 .invmsg { text-align: left; background: var(--surface-2); border-radius: 14px; padding: 12px; font-size: 14px; line-height: 1.45; word-break: break-word; user-select: text; -webkit-user-select: text; }
 .banner .ghostb { background: rgba(255,255,255,.18); color: #fff; border: 1px solid rgba(255,255,255,.5); }
 .banner { flex-wrap: wrap; }
+.kidlock { display: grid; justify-items: center; gap: 12px; text-align: center; padding-top: 8px; }
+.kidlock .m { width: 140px; height: 140px; }
+.lockpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; width: min(340px, 100%); }
+.lockpad button { aspect-ratio: 1; font-size: 46px; border-radius: 22px; border: 2px solid var(--line); background: var(--surface); box-shadow: var(--shadow); }
+.lockpad button:active { transform: scale(.94); background: var(--surface-2); }
+.lockpad.shake { animation: lockshake .4s; }
+@keyframes lockshake { 25% { transform: translateX(-10px); } 75% { transform: translateX(10px); } }
+.lockset { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: center; background: var(--surface-2); border-radius: 14px; padding: 12px; }
+.lockshow { font-size: 22px; letter-spacing: 4px; }
+.lockshow.big { font-size: 40px; text-align: center; }

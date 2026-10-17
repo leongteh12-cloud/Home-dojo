@@ -2150,6 +2150,8 @@ function viewSettings() {
         <div class="row" style="gap:10px;flex-wrap:wrap"><label class="field" style="max-width:100px">Age<input id="ag${ki}" data-k="${ki}" data-f="age" type="number" min="1" max="16" value="${esc(k.age)}"></label>
         <label class="field" style="max-width:170px">Birthday<input id="bd${ki}" data-k="${ki}" data-f="birthday" type="date" value="${esc(k.birthday || "")}"></label></div>
         <label class="row" style="gap:8px;font-weight:700"><input type="checkbox" data-k="${ki}" data-f="toddler" ${isToddler(k) ? "checked" : ""}> Toddler view (giant buttons, peekaboo)</label></div></div>
+      <div class="lockset"><div><b>Secret pictures</b><p class="meta" style="margin:2px 0 0">${(k.lock || []).length ? `In Kids' play, ${esc(k.name || "they")} taps these in order to open their profile: <span class="lockshow">${k.lock.map((i) => LOCK_PICS[i]).join(" ")}</span>` : `Off. Anyone can open ${esc(k.name || "this child")}'s profile in Kids' play.`}</p></div>
+        <div class="row"><button class="btn small" data-lockset="${ki}">${(k.lock || []).length ? "Change" : "Choose 3 pictures"}</button>${(k.lock || []).length ? `<button class="btn small ghost" data-lockclear="${ki}">Turn off</button>` : ""}</div></div>
       <p class="meta" style="margin:0">Change the character, colours and outfit in ${esc(k.name || "their")}'s Monster tab. The kids can do it too.</p>
       <div><div class="row" style="justify-content:space-between"><h3 style="font-size:19px">Behaviours</h3><span class="count${n > max ? " over" : ""}">${n} active · aim for ${rec}</span></div>
         ${n > max ? `<p class="meta" style="color:var(--warn);margin:4px 0 0">That's a lot to keep track of. Try mastering a few first, then swap.</p>` : ""}
@@ -2193,6 +2195,51 @@ function viewSettings() {
 ` + backupCard() + deviceCard();
   }
   return top + `<div class="list" style="gap:18px">${body}</div>`;
+}
+
+/* ---------- secret pictures: each child's own lock in Kids' play ---------- */
+// A child taps their 3 secret pictures in order to open their profile (and act as themselves on the islands),
+// so a brother or sister can't spend their Dojo $ or change their monster. Parents never see the lock.
+const LOCK_PICS = ["🐶", "🐱", "🦁", "🐸", "🚀", "⚽", "🍎", "🌈", "⭐"];
+function lockedKid(r) {
+  if (!kidsMode()) return null;
+  const id = r.name === "kid" ? r.kid : (r.name === "island" || r.name === "islands") ? r.as : null;
+  const k = id && kidById(id);
+  return k && (k.lock || []).length === 3 && S.kidOk !== k.id ? k : null;
+}
+function viewKidLock(k) {
+  const n = (S.lockEntry || "").length;
+  return `<div class="kidlock" style="--kid:${esc(k.look.color)}"><div class="m">${monsterSvg(k.look, dressedFor(k), stats(k.id).level)}</div>
+    <h1>Hi ${esc(k.name)}!</h1><p class="lead">Tap your 3 secret pictures</p>
+    <div class="dots">${[0, 1, 2].map((i) => `<i class="${i < n ? "f" : ""}"></i>`).join("")}</div>
+    <div class="lockpad">${LOCK_PICS.map((p, i) => `<button data-lockpic="${i}" aria-label="Picture ${i + 1}">${p}</button>`).join("")}</div>
+    <button class="btn ghost" id="lockBack">← Not me</button></div>`;
+}
+function wireKidLock() {
+  const k = lockedKid(S.route); if (!k) return;
+  $("#view").querySelectorAll("[data-lockpic]").forEach((b) => b.onclick = () => {
+    S.lockEntry = (S.lockEntry || "") + b.dataset.lockpic;
+    if (S.lockEntry.length < 3) return rerender();
+    const ok = S.lockEntry === k.lock.join("");
+    S.lockEntry = "";
+    if (ok) { S.kidOk = k.id; rerender(); return; }
+    rerender(); toast("Not quite. Try again!");
+    const pad = $(".lockpad"); if (pad) { pad.classList.add("shake"); setTimeout(() => pad.classList.remove("shake"), 500); }
+  });
+  const back = $("#lockBack"); if (back) back.onclick = () => go({ name: "home" });
+}
+// Settings: the parent picks the 3 pictures in order.
+function pickLock(k, done) {
+  let pick = [];
+  const draw = () => modal(`<h2>${esc(k.name || "Child")}'s secret pictures</h2><p class="meta">Tap 3 pictures in order. Choose ones ${esc(k.name || "they")} will remember, then show them.</p>
+    <div class="lockshow big">${[0, 1, 2].map((i) => pick[i] != null ? LOCK_PICS[pick[i]] : "＿").join(" ")}</div>
+    <div class="lockpad">${LOCK_PICS.map((p, i) => `<button data-pp="${i}">${p}</button>`).join("")}</div>
+    <div class="row" style="justify-content:center"><button class="btn ghost" id="ppNo">Cancel</button><button class="btn primary" id="ppOk" ${pick.length === 3 ? "" : "disabled"}>Save pictures</button></div>`, (ov) => {
+    ov.querySelectorAll("[data-pp]").forEach((b) => b.onclick = () => { if (pick.length < 3) pick.push(+b.dataset.pp); else pick = [+b.dataset.pp]; draw(); });
+    $("#ppNo").onclick = closeModal;
+    $("#ppOk").onclick = () => { k.lock = pick; closeModal(); done(); toast("Secret pictures set. Remember to tap Save."); };
+  });
+  draw();
 }
 
 /* ---------- home menu: Kids' play, Parents and Set up ---------- */
@@ -2380,6 +2427,7 @@ function render() {
   else if (!S.cfg || !(S.cfg.kids || []).length) { if (isAdminRole()) { if (!S.wiz) startWizard(); S.route = { name: "setup" }; html = viewWizard(); } else html = viewSetup(); }
   else if (S.view === "menu" && r.name !== "guide") html = viewMenu();
   else if (r.name === "guide") html = viewGuide();
+  else if (lockedKid(r)) html = viewKidLock(lockedKid(r));
   else if ((r.name === "island" || r.name === "islands") && isl()) html = isl().view(r);
   else if (r.name === "kid" && kidById(r.kid)) html = viewKid(kidById(r.kid), r.tab || "earn");
   else { S.route = { name: "home" }; html = viewHome(); }
@@ -2395,7 +2443,7 @@ function render() {
   const ao = $("#adminOff"); if (ao) ao.onclick = () => { S.adminPlay = false; toast("Admin mode off."); rerender(); };
   wire();
 }
-function go(route) { S.route = route; S.lastRoute = null; S.lastHtml = ""; render(); window.scrollTo(0, 0); }
+function go(route) { if (route.name === "home") { S.kidOk = null; S.lockEntry = ""; } S.route = route; S.lastRoute = null; S.lastHtml = ""; render(); window.scrollTo(0, 0); }
 function rerender() { S.lastRoute = null; S.lastHtml = ""; render(); }
 
 function wire() {
@@ -2516,6 +2564,7 @@ function wire() {
   const gb = $("#guideBtn"); if (gb) gb.onclick = () => go({ name: "guide" });
   const gk = $("#guideBack"); if (gk) gk.onclick = () => go({ name: "home" });
   if (S.route.name === "settings" && S.phase === "app") wireSettings();
+  if (S.phase === "app" && S.cfg) wireKidLock();
   if (S.route.name === "setup" && S.phase === "app") wireWizard();
   on("#goKids", enterKids); on("#goParents", () => enterParents());
   on("#goSetup", () => enterParents(() => { startWizard(); go({ name: "setup" }); }));
@@ -2566,6 +2615,8 @@ function wireSettings() {
     const ki = +b.dataset.rmkid, k = d.kids[ki];
     confirmBox(`Remove ${k.name}?`, "Their monster and settings go when you save. Their point history stays, in case you add them back.", "Remove", () => { d.kids.splice(ki, 1); redraw(); });
   });
+  v.querySelectorAll("[data-lockset]").forEach((b) => b.onclick = () => pickLock(d.kids[+b.dataset.lockset], redraw));
+  v.querySelectorAll("[data-lockclear]").forEach((b) => b.onclick = () => { delete d.kids[+b.dataset.lockclear].lock; redraw(); });
   on("#addKid", () => { d.kids.push(starterKid("New child", 6, d.kids.length)); S.setKid = d.kids.length - 1; redraw(); });
   const tm = (f, el) => { d.team = Object.assign({ startAt: Date.now() }, TEAM_DEFAULT, d.team); d.team[f] = el.type === "number" ? Math.max(5, parseInt(el.value, 10) || 30) : el.value; };
   [["icon", "#tmIc"], ["label", "#tmLb"], ["target", "#tmTg"]].forEach(([f, sel]) => { const el = $(sel); if (el) el.oninput = () => tm(f, el); });
