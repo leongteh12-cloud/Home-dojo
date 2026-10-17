@@ -1,0 +1,66 @@
+# One line per clip. The app plays a clip when the words it wants to say match a line here (ignoring case and punctuation).
+Hi!
+Yay!
+Wheee!
+Hee hee!
+Boing!
+Let's play!
+High five!
+That tickles!
+Woo hoo!
+Big hug!
+Peekaboo!
+Squeak!
+Hop hop!
+Meow!
+Woof!
+Hoot!
+Rawr!
+Great job today!
+Let's earn a Dojo today!
+Keep going to reach the next level!
+Your next big reward is getting closer!
+You're on a streak! Keep it going!
+There's an egg in the garden!
+I love my hat!
+My pet says hi!
+Happy birthday!
+You're awesome!
+Give me a high five!
+I'm so proud of you!
+That's my name!
+Pop the bubbles!
+Pop the red bubbles!
+Pop the blue bubbles!
+Pop the yellow bubbles!
+Pop the green bubbles!
+Feed me what I ask for!
+I want an apple!
+I want a banana!
+I want a strawberry!
+I want grapes!
+I want a carrot!
+I want watermelon!
+I want a cookie!
+I want cheese!
+I want broccoli!
+I want pizza!
+I want a donut!
+I want corn!
+Flip two cards and find the matching pairs!
+Slide the pieces to fix the picture!
+You did it!
+Catch the stars and dodge the rocks!
+Tap to jump over the rocks! Tap again in the air to jump higher!
+Watch me, then copy me!
+Your turn!
+Listen again!
+Let's try a shorter one!
+Yes! One more!
+New high score!
+First high score!
+So close to your best!
+Nice playing!
+Tap the monsters when they pop up! Let the sleepy ones sleep!
+Ready, set, go! Tap left or right to change lanes!
+I'm in first place!

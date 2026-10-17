@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Home Dojo</title>
+<meta name="description" content="Family points for good behaviour, with monsters that grow.">
+<meta name="theme-color" content="#EAF0F6" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F1528" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Home Dojo">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand" id="brand">Home Dojo</div>
+    <span class="sync" id="syncDot" hidden></span>
+    <button class="iconbtn" id="menuBtn" aria-label="Back to the menu" title="Menu" hidden><span aria-hidden="true">🏠</span> Menu</button>
+    <button class="iconbtn" id="soundBtn" aria-label="Sound on" title="Sound"></button>
+    <button class="iconbtn" id="setBtn" aria-label="Settings" title="Settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+  </header>
+  <main id="view"><div class="empty">Waking up the monsters…</div></main>
+</div>
+<div id="overlay"></div>
+<div id="toastHost"></div>
+<div id="updateHost"></div>
+<canvas id="fx"></canvas>
+<script src="config.js"></script>
+<script src="vendor/supabase.js"></script>
+<script src="monsters.js"></script>
+<script src="guide.js"></script>
+<script src="voice.js"></script>
+<script src="islands.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
