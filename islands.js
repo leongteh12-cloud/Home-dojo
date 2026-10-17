@@ -75,6 +75,9 @@ const THING = {
   volcano: { n: "Volcano", big: 1, a: () => `<path d="M-26 0 L-8 -36 H8 L26 0Z" fill="#8D6E63"/><path d="M-8 -36 H8 L5 -30 Q0 -26 -5 -30Z" fill="#FF5A1F"/><path d="M-3 -32 Q-6 -20 -10 -12 M3 -32 Q5 -22 9 -16" stroke="#FF8A2A" stroke-width="3" fill="none" stroke-linecap="round"/><g class="isl-smoke"><circle cx="0" cy="-44" r="6" fill="#D0D6E0"/><circle cx="6" cy="-52" r="5" fill="#E4E8EF"/><circle cx="-4" cy="-56" r="4" fill="#EEF1F5"/></g>` },
   rocket: { n: "Rocket", big: 1, a: () => `<path d="M0 -60 Q12 -46 10 -12 H-10 Q-12 -46 0 -60Z" fill="#fff" stroke="#D0D6E0"/><path d="M0 -60 Q7 -52 8.6 -44 H-8.6 Q-7 -52 0 -60Z" fill="#E63946"/><circle cx="0" cy="-32" r="5" fill="#6FC8F2" stroke="#4A4E69" stroke-width="2"/><path d="M-10 -24 L-18 -6 H-10Z M10 -24 L18 -6 H10Z" fill="#E63946"/><path class="isl-flicker" d="M-6 -12 Q0 6 6 -12Z" fill="#FFB400"/><path d="M-10 0 H10" stroke="#4A4E69" stroke-width="3"/>` }
 };
+// Island specials (bought with Dojo $) use their generated pictures.
+[["fountain", "isl_fountain"], ["bouncy", "isl_bouncy"], ["lighthouse", "isl_lighthouse"], ["rainbow", "isl_rainbow"], ["treehouse", "isl_treehouse"], ["ship", "isl_ship"], ["volcano", "isl_volcano"], ["rocket", "isl_rocket"]]
+  .forEach(([k, id]) => { if (THING[k]) THING[k].a = () => `<image href="${window.HD.shopArt(id)}" x="-28" y="-54" width="56" height="58" preserveAspectRatio="xMidYMax meet"/>`; });
 const pieceName = (p) => (GROUND[p] || THING[p] || { n: p }).n;
 const SHOP = [["isl_fountain", "fountain", 25], ["isl_bouncy", "bouncy", 35], ["isl_lighthouse", "lighthouse", 40], ["isl_rainbow", "rainbow", 50], ["isl_treehouse", "treehouse", 60], ["isl_ship", "ship", 80], ["isl_volcano", "volcano", 100], ["isl_rocket", "rocket", 120]]
   .map(([id, piece, cost]) => ({ id, piece, cost, name: THING[piece].n }));

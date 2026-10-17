@@ -137,7 +137,11 @@ function eyePos(n, y) {
   if (n === 3) return [[73, y + 4, 10.5], [100, y - 8, 10.5], [127, y + 4, 10.5]];
   return [[81, y, 13], [119, y, 13]];
 }
+// Generated pictures live in scenery/ (the artifact build inlines them as window.HD_SCENERY).
+const artUrl = (n) => (window.HD_SCENERY && window.HD_SCENERY[n]) || `scenery/${n}.webp`;
+const shopArt = (id) => artUrl("shop-" + id);
 function bgSvg(id, gid) {
+  if (SHOP.some((i) => i.slot === "bg" && i.id === id)) return `<clipPath id="${gid}bc"><rect width="200" height="200" rx="26"/></clipPath><image href="${shopArt(id)}" width="200" height="200" clip-path="url(#${gid}bc)" preserveAspectRatio="xMidYMid slice"/>`;
   switch (id) {
     case "meadow": return `<defs><linearGradient id="${gid}s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9ED8FF"/><stop offset="1" stop-color="#DDF3FF"/></linearGradient></defs><rect width="200" height="200" rx="26" fill="url(#${gid}s)"/><circle cx="160" cy="38" r="16" fill="#FFD44D"/><path d="M0 160 Q60 130 120 158 T200 150 V200 H0Z" fill="#7BCB63"/><rect x="0" y="174" width="200" height="26" fill="#5DB24A"/>`;
     case "ocean": return `<rect width="200" height="200" rx="26" fill="#2E8BD6"/><path d="M0 40 Q25 30 50 40 T100 40 T150 40 T200 40 V0 H0Z" fill="#7CC7FF"/><circle cx="30" cy="80" r="6" fill="none" stroke="#BFE6FF" stroke-width="2"/><circle cx="170" cy="60" r="9" fill="none" stroke="#BFE6FF" stroke-width="2"/><circle cx="160" cy="100" r="4" fill="none" stroke="#BFE6FF" stroke-width="2"/><path d="M0 182 Q50 170 100 182 T200 180 V200 H0Z" fill="#F2D98D"/>`;
@@ -355,15 +359,23 @@ const FURNI_ART = {
   f_ball: { box: [244, 212, 28, 28], draw: () => `<circle cx="258" cy="226" r="10" fill="#fff" stroke="#1C1830" stroke-width="1.5"/><path d="M258 221 l4 3 l-1.5 5 h-5 l-1.5 -5z" fill="#1C1830"/><path d="M258 221 v-5 M262 224 l5 -2 M260.5 229 l3 4 M255.5 229 l-3 4 M254 224 l-5 -2" stroke="#1C1830" stroke-width="1.2"/>` }
 };
 // A big, clear picture of one piece of furniture against the room's wall and floor, for the shop.
+// Furniture uses its picture, fitted into the spot where its drawing used to sit.
+function furniPic(id) {
+  const [x, y, w, h] = FURNI_ART[id].box, ceil = y < 10;
+  return `<image href="${shopArt(id)}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="xMid${ceil ? "YMin" : "YMax"} meet"/>`;
+}
 function furniCloseup(id, tier) {
-  const f = FURNI_ART[id]; if (!f) return "";
-  const [x, y, w, h] = f.box, side = Math.max(w, h) + 16, cx = x + w / 2, cy = y + h / 2;
+  if (!FURNI_ART[id]) return "";
   const wall = ["#F3E2C7", "#CFE8F7", "#E6DDF6", "#C9CED6"][tier || 0], floor = ["#B98A5B", "#A8744A", "#7FB7A4", "#8E8A86"][tier || 0];
-  return `<svg viewBox="${(cx - side / 2).toFixed(1)} ${(cy - side / 2).toFixed(1)} ${side} ${side}" aria-hidden="true"><rect x="-400" y="-400" width="1200" height="576" fill="${wall}"/><rect x="-400" y="176" width="1200" height="600" fill="${floor}"/><rect x="-400" y="172" width="1200" height="6" fill="${shade(wall, -0.25)}"/>${f.draw(new Set([id]))}</svg>`;
+  return `<svg viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" fill="${wall}"/><rect y="74" width="100" height="26" fill="${floor}"/><rect y="72" width="100" height="3" fill="${shade(wall, -0.25)}"/><image href="${shopArt(id)}" x="8" y="6" width="84" height="84" preserveAspectRatio="xMidYMax meet"/></svg>`;
 }
 const PET_IDS = ["rock", "snail", "hamster", "bunny", "cat", "puppy", "owl", "slime", "octopus", "trex", "robodog", "unicorn", "babydragon", "alien"];
 // Each pet is drawn around (0,0) with its feet at about y=24.
 function petSvg(id) {
+  if (PET_IDS.includes(id)) return `<image href="${shopArt(id)}" x="-27" y="-29" width="54" height="54" preserveAspectRatio="xMidYMax meet"/>`;
+  return petDrawn(id);
+}
+function petDrawn(id) {
   const eye = (x, y) => `<circle cx="${x}" cy="${y}" r="2" fill="#222"/><circle cx="${x + .6}" cy="${y - .7}" r=".7" fill="#fff"/>`;
   switch (id) {
     case "rock": return `<path d="M-17 22 Q-20 8 -10 2 Q0 -4 10 1 Q20 6 18 22Z" fill="#9AA3B2" stroke="#6D7A8C" stroke-width="2"/><path d="M-8 8 q4 -2 7 0 M6 16 q3 -2 6 0" stroke="#6D7A8C" stroke-width="1.5" fill="none"/><circle cx="-5" cy="11" r="4.5" fill="#fff" stroke="#222" stroke-width="1"/><circle cx="6" cy="10" r="4.5" fill="#fff" stroke="#222" stroke-width="1"/><circle cx="-4" cy="12" r="2" fill="#222"/><circle cx="7" cy="11" r="2" fill="#222"/>`;
@@ -470,7 +482,7 @@ function houseSvg(o) {
   const ts = skins.length > 4 ? 8.5 : 12.5, tw = skins.length > 4 ? 7.5 : 11;
   skins.forEach((k, i) => { const x = 302 + i * ts; s += `<g data-wear="${k}" style="cursor:pointer"><rect x="${x}" y="92" width="${tw}" height="16" rx="2" fill="${tinCol[k]}"/><rect x="${x}" y="92" width="${tw}" height="4" rx="1.5" fill="#DDD"/></g>`; });
   // furniture, back to front
-  Object.keys(FURNI_ART).forEach((id) => { if (owned.has(id)) s += FURNI_ART[id].draw(owned); });
+  Object.keys(FURNI_ART).forEach((id) => { if (owned.has(id)) s += furniPic(id); });
   // coat stand with accessories
   const accs = SHOP.filter((i) => i.slot === "acc" && owned.has(i.id)).map((i) => i.id);
   if (accs.length) {
@@ -486,5 +498,5 @@ function houseSvg(o) {
   return s + `</g></svg>`;
 }
 
-window.HD = { star, LIB, BONUS, SHOP, PRICE_TIERS, priceTier, FURNI_ART, furniCloseup, SLOTS, LEVELS, COLORS, SHAPES, TOPS, SPECIES, MOUTHS, EYESTYLES, BROWS, NOSES, CHEEKS, ARMS, BELLIES, LOOK_DEFAULTS, monsterSvg, shade, trophySvg, medalSvg, badgeSvg, HOUSE, FURNI, houseTier, houseSvg, houseOutsideSvg, hatPart, accIcon, petSvg, PET_IDS };
+window.HD = { artUrl, shopArt, star, LIB, BONUS, SHOP, PRICE_TIERS, priceTier, FURNI_ART, furniCloseup, SLOTS, LEVELS, COLORS, SHAPES, TOPS, SPECIES, MOUTHS, EYESTYLES, BROWS, NOSES, CHEEKS, ARMS, BELLIES, LOOK_DEFAULTS, monsterSvg, shade, trophySvg, medalSvg, badgeSvg, HOUSE, FURNI, houseTier, houseSvg, houseOutsideSvg, hatPart, accIcon, petSvg, PET_IDS };
 })();

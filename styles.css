@@ -715,3 +715,4 @@ textarea.inp { min-height: 80px; resize: vertical; font: inherit; }
 .gplot small { font-weight: 700; color: var(--muted); }
 .gbar { display: block; width: 52px; height: 6px; border-radius: 3px; background: #E2CFB6; overflow: hidden; }
 .gbar b { display: block; height: 100%; background: #5CC260; border-radius: 3px; }
+.item .shop-pic { width: 100%; height: 100%; object-fit: contain; display: block; }
