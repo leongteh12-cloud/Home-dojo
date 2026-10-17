@@ -19,7 +19,7 @@ const S = {
   user: null, family: null, role: "carer", members: [],
   cfg: null, cfgLoaded: false, awards: [],
   route: { name: "home" }, draft: null, lastHtml: "", lastRoute: null,
-  outbox: [], online: navigator.onLine, channel: null, authTab: "signin", recovery: false,
+  outbox: [], online: navigator.onLine, channel: null, authTab: new URLSearchParams(location.search).get("invite") ? "signup" : "signin", recovery: false,
   view: lget("hd.view", "menu") === "kids" ? "kids" : "menu"   // menu | kids | parents (see "home menu" below)
 };
 const $ = (s, el) => (el || document).querySelector(s);
@@ -38,7 +38,15 @@ function lset(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch 
 function ldel(k) { try { localStorage.removeItem(k); } catch (e) {} }
 
 const params = new URLSearchParams(location.search);
-const inviteFromLink = (params.get("invite") || "").toUpperCase();
+// An invite link carries the code plus who sent it and the family name, just for a friendly welcome.
+// It's remembered on this device so it survives the trip out to the confirmation email and back.
+const INVITE = (() => {
+  const code = (params.get("invite") || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 16);
+  if (code) { const v = { code, from: (params.get("from") || "").slice(0, 40), fam: (params.get("fam") || "").slice(0, 60) }; lset("hd.invite", v); return v; }
+  return lget("hd.invite", null) || { code: "", from: "", fam: "" };
+})();
+const inviteFromLink = INVITE.code;
+const inviteQuery = () => inviteFromLink ? "?" + new URLSearchParams({ invite: inviteFromLink, from: INVITE.from, fam: INVITE.fam }).toString() : "";
 
 /* ---------- boot ---------- */
 async function boot() {
@@ -74,7 +82,17 @@ async function afterSignIn(user) {
     if (lastFam) { S.outbox = lget("hd.outbox." + lastFam.id, []); syncDot(); return; }
     S.phase = "nofamily"; render(); toast("Couldn't reach the server. Check your connection."); return;
   }
-  if (!rows.length) { S.phase = "nofamily"; S.family = null; return render(); }
+  if (!rows.length) {
+    // Came from an invite link: join straight away, no extra form.
+    const name = (user.user_metadata && user.user_metadata.name) || "";
+    if (inviteFromLink && name && !S.autoJoinTried) {
+      S.autoJoinTried = true;
+      const j = await sb.rpc("join_family", { p_code: inviteFromLink, p_display: name });
+      if (!j.error) { history.replaceState(null, "", location.pathname); ldel("hd.invite"); await afterSignIn(user); return welcomeJoined(); }
+      toast("That invite didn't work: " + j.error.message);
+    }
+    S.phase = "nofamily"; S.family = null; return render();
+  }
   const pick = rows.find((r) => lastFam && r.family_id === lastFam.id) || rows[0];
   await openFamily({ id: pick.family_id, name: (pick.families && pick.families.name) || "Our family", role: pick.role });
 }
@@ -598,14 +616,30 @@ async function createInvite(role) {
   const code = newCode();
   const r = await sb.from("invites").insert({ code, family_id: S.family.id, role });
   if (r.error) return toast("Couldn't create an invite: " + r.error.message);
-  const link = location.origin + location.pathname + "?invite=" + code;
+  const me = S.members.find((m) => S.user && m.user_id === S.user.id);
+  const from = (me && me.display_name) || "", fam = S.family.name || "";
+  const link = location.origin + location.pathname + "?" + new URLSearchParams({ invite: code, from, fam }).toString();
   const who = role === "admin" ? "a parent" : "a carer";
-  modal(`<h2>Invite ${who}</h2><p class="meta">Send them this link. They open it, create an account, and the code is filled in for them. It works once and lasts 14 days.</p>
-    <div class="code">${code}</div><div class="small-link">${esc(link)}</div>
-    <div class="row" style="justify-content:center"><button class="btn" id="cp">Copy link</button>${navigator.share ? '<button class="btn primary" id="sh">Share…</button>' : ""}<button class="btn ghost" id="ok">Done</button></div>`, () => {
+  const msg = `${from ? from + " has" : "You've been"} invited you to join ${fam || "our family"} on Home Dojo Monsters 👾\n\n` +
+    `1. Tap this link: ${link}\n2. Tap Create account and put in your name, email and a password.\n3. If a confirmation email arrives, tap the link in it.\n4. You'll join the family automatically.\n\n` +
+    `Then add it to your home screen: on iPhone, Safari > Share > Add to Home Screen. On Android, Chrome > ⋮ > Install app.`;
+  modal(`<h2>Invite ${who}</h2><p class="meta">Send them this message. The link fills everything in for them, works once and lasts 14 days.</p>
+    <div class="code">${code}</div><div class="invmsg">${esc(msg).replace(/\n/g, "<br>")}</div>
+    <div class="row" style="justify-content:center">${navigator.share ? '<button class="btn primary" id="sh">Share…</button>' : ""}<button class="btn" id="cp">Copy message</button><button class="btn ghost" id="ok">Done</button></div>`, () => {
     $("#ok").onclick = closeModal;
-    $("#cp").onclick = async () => { try { await navigator.clipboard.writeText(link); toast("Link copied"); } catch (e) { toast("Copy didn't work. Press and hold the link to copy it."); } };
-    const sh = $("#sh"); if (sh) sh.onclick = async () => { try { await navigator.share({ title: "Join our Home Dojo", text: `Join our family on Home Dojo. Your invite code is ${code}.`, url: link }); } catch (e) {} };
+    $("#cp").onclick = async () => { try { await navigator.clipboard.writeText(msg); toast("Message copied. Paste it into a text or WhatsApp."); } catch (e) { toast("Copy didn't work. Press and hold the message to copy it."); } };
+    const sh = $("#sh"); if (sh) sh.onclick = async () => { try { await navigator.share({ title: "Join our Home Dojo", text: msg }); } catch (e) {} };
+  });
+}
+// First thing a new parent or carer sees after joining: a hello, how to install, and what they can do.
+function welcomeJoined() {
+  const parent = S.role === "admin";
+  modal(`<div style="font-size:44px;line-height:1">🎉</div><h2>Welcome to ${esc(S.family ? S.family.name : "the family")}!</h2>
+    ${installHelp() ? `<div style="text-align:left">${installHelp()}</div>` : ""}
+    <ul class="welcome-list"><li>Tap <b>Parents</b> to give Dojos when you see great behaviour.</li>${parent ? "<li>Settings has the children's behaviours, rewards and invites.</li>" : "<li>A parent looks after rewards and settings.</li>"}<li>Everything you do shows up on everyone's phones straight away.</li></ul>
+    <button class="btn primary" id="welOk">Let's go!</button>`, () => {
+    $("#welOk").onclick = closeModal;
+    const ib = $("#installBtn"); if (ib) ib.onclick = async () => { if (!deferredInstall) return; deferredInstall.prompt(); deferredInstall = null; closeModal(); };
   });
 }
 async function removeMember(m) {
@@ -1861,7 +1895,10 @@ function viewNoSetup() {
 function viewSignIn() {
   const t = S.authTab;
   return `<div class="auth"><div class="m">${monsterSvg({ shape: "tall", color: COLORS[1], eyes: 1, top: "ears" }, {}, 1)}</div>
-    <h1>Home Dojo</h1><p class="lead">${inviteFromLink ? "You've been invited to a family. Create an account (or sign in) to join." : "Points for good behaviour, with monsters that grow."}</p>
+    <h1>${inviteFromLink ? `${INVITE.from ? esc(INVITE.from) + " invited you!" : "You're invited!"}` : "Home Dojo"}</h1>
+    ${inviteFromLink ? `<div class="card invitebox"><p style="margin:0">Join ${INVITE.fam ? `<b>${esc(INVITE.fam)}</b>` : "the family"} on Home Dojo Monsters, where the kids earn Dojos for great behaviour and grow their monsters.</p>
+      <ol><li><b>Create account</b> below with your name, email and a password.</li><li>If an email arrives, tap the link in it to confirm.</li><li>You'll join the family automatically. That's it!</li></ol>
+      <p class="meta" style="margin:0">Already have an account? Tap Sign in instead.</p></div>` : `<p class="lead">Points for good behaviour, with monsters that grow.</p>`}
     <div class="seg2"><button data-auth="signin" aria-pressed="${t === "signin"}">Sign in</button><button data-auth="signup" aria-pressed="${t === "signup"}">Create account</button></div>
     <form id="authForm" class="card" novalidate>
       ${t === "signup" ? `<label class="field">Your name (as the kids call you)<input id="aName" autocomplete="nickname" placeholder="e.g. Mum, Dad, Nana" required></label>` : ""}
@@ -2050,39 +2087,64 @@ function starterKid(name, age, i) {
   };
 }
 
-function viewFamilyPanel() {
+function famCard() {
   const me = S.members.find((m) => S.user && m.user_id === S.user.id);
   const admin = isAdmin();
-  let html = "";
-  if (S.mode === "cloud") {
-    html += `<section class="card"><h3 style="font-size:19px">${esc(S.family.name)}</h3>
+  if (S.mode !== "cloud") return "";
+  return `<section class="card"><h3 style="font-size:19px">${esc(S.family.name)}</h3>
       <label class="field">Your name (as the kids call you)<input id="myName" value="${esc(me ? me.display_name : "")}"></label>
       <div><div class="meta" style="font-weight:700">Who's in the family</div>${S.members.map((m) => `<div class="member"><div class="t"><b>${esc(m.display_name || "Someone")}${S.user && m.user_id === S.user.id ? " (you)" : ""}</b></div><span class="pill role">${m.role === "admin" ? "Parent" : "Carer"}</span>${admin && S.user && m.user_id !== S.user.id ? `<button class="x" data-rmmember="${esc(m.user_id)}" aria-label="Remove ${esc(m.display_name)}">✕</button>` : ""}</div>`).join("")}</div>
       ${admin ? `<div class="row"><button class="btn small primary" data-invite="carer">+ Invite a carer</button><button class="btn small" data-invite="admin">+ Invite a parent</button></div>
       <p class="meta" style="margin:0">Carers can give points and dress the monsters. Parents can also spend treats, mark goals as given, change settings and invite people.</p>` : `<p class="meta" style="margin:0">You're a carer: you can give points and help dress the monsters. Ask a parent to spend treats or change settings.</p>`}
     </section>`;
-  }
-  if (admin && !HOST) html += `<section class="card"><h3 style="font-size:19px">Backups</h3><p class="meta" style="margin:0">Everything is saved online automatically. A backup file is an extra copy you keep, in case anything ever goes wrong.</p>
+}
+function backupCard() {
+  if (!isAdmin() || HOST) return "";
+  return `<section class="card"><h3 style="font-size:19px">Backups</h3><p class="meta" style="margin:0">Everything is saved online automatically. A backup file is an extra copy you keep, in case anything ever goes wrong.</p>
     <div class="row"><button class="btn small primary" id="bkDown">Download backup</button><button class="btn small" id="bkUp">Restore from a file…</button></div>
     ${lget("hd.lastBackup", 0) ? `<p class="meta" style="margin:0">Last backup from this device: ${new Date(lget("hd.lastBackup", 0)).toLocaleDateString()}</p>` : ""}</section>`;
-  if (!HOST) html += `<section class="card"><h3 style="font-size:19px">This device</h3>${installHelp() || `<p class="meta" style="margin:0">Installed on this device.</p>`}
-    <label class="row" style="gap:8px"><input type="checkbox" id="muteDev" ${lget("hd.mute", false) ? "checked" : ""}> Mute sounds on this device</label>
-    ${S.mode === "cloud" ? `<button class="btn small ghost" id="signOutBtn">Sign out</button>` : HOST ? "" : `<button class="btn small ghost" id="leaveLocal">Leave try-it-out mode</button>`}</section>`;
-  return html;
 }
+function deviceCard() {
+  if (HOST) return "";
+  return `<section class="card"><h3 style="font-size:19px">This device</h3>${installHelp() || `<p class="meta" style="margin:0">Installed on this device.</p>`}
+    <label class="row" style="gap:8px"><input type="checkbox" id="muteDev" ${lget("hd.mute", false) ? "checked" : ""}> Mute sounds on this device</label>
+    <button class="btn small" id="newsBtn">✨ What's new</button>
+    ${S.mode === "cloud" ? `<button class="btn small ghost" id="signOutBtn">Sign out</button>` : HOST ? "" : `<button class="btn small ghost" id="leaveLocal">Leave try-it-out mode</button>`}</section>`;
+}
+function viewFamilyPanel() { return famCard() + backupCard() + deviceCard(); }
 
+// Settings opens on a page of big tiles; each tile is a short page of its own. Edits stay in the draft across pages until Save.
+const SET_PAGES = [
+  ["kids", "👧", "Children & behaviours", "Names, ages, birthdays and the behaviours that earn Dojos.", "Children"],
+  ["rewards", "🎁", "Treats & reward goals", "What Dojo $ can buy, the big goals and the family team jar.", "Rewards"],
+  ["games", "🎮", "Games & admin mode", "Turn games on or off, set a daily limit, and edit anything in admin mode.", "Games"],
+  ["family", "👪", "Family & invites", "Who's in the family. Invite a parent or a carer.", "Family"],
+  ["device", "🔒", "PIN, backups & this device", "Parent PIN, backup files, sounds, sign out and what's new.", "This device"]
+];
+function setKidPicker(d) {
+  if (d.kids.length < 2) return "";
+  return `<div class="seg2 kidpick">${d.kids.map((k, i) => `<button data-setkid="${i}" aria-pressed="${i === S.setKid}">${esc(k.name || "Child")}</button>`).join("")}</div>`;
+}
 function viewSettings() {
   const d = S.draft;
   if (!isAdmin()) {
     return `<div class="row" style="margin-bottom:12px;justify-content:space-between"><button class="iconbtn" id="setCancel">← Back</button><h1 style="font-size:24px">Settings</h1><span></span></div><div class="list" style="gap:18px">${viewFamilyPanel()}</div>`;
   }
-  return `<div class="row" style="margin-bottom:12px;justify-content:space-between"><button class="iconbtn" id="setCancel">Cancel</button><h1 style="font-size:24px">Settings</h1><button class="btn primary" id="setSave">Save</button></div>
-  <div class="list" style="gap:18px">
-  ${d.kids.map((k, ki) => {
+  const pages = SET_PAGES.filter(([id]) => id !== "family" || S.mode === "cloud");
+  const page = pages.find((x) => x[0] === S.setPage);
+  if (!page) S.setPage = null;
+  S.setKid = Math.min(S.setKid || 0, Math.max(0, d.kids.length - 1));
+  const top = `<div class="row" style="margin-bottom:12px;justify-content:space-between">${page ? `<button class="iconbtn" data-setpage="">← Settings</button>` : `<button class="iconbtn" id="setCancel">Cancel</button>`}<h1 style="font-size:24px">${page ? page[1] + " " + page[4] : "Settings"}</h1><button class="btn primary" id="setSave">Save</button></div>`;
+  if (!page) return top + `<div class="list" style="gap:14px">${pages.map(([id, ic, t, txt]) => `<button class="menutile settile" data-setpage="${id}"><span class="mi" aria-hidden="true">${ic}</span><span class="mt"><b>${t}</b><small>${txt}</small></span><span class="chev" aria-hidden="true">›</span></button>`).join("")}
+    <p class="meta" style="text-align:center;margin:0">Changes are kept as you move between pages. Tap Save when you're done.</p></div>`;
+  const ki = S.setKid, k = d.kids[ki];
+  let body = "";
+  if (S.setPage === "kids") {
+    body = setKidPicker(d) + (k ? (() => {
     const big = (k.age || 6) >= 4, n = k.behaviours.length, rec = big ? "3 to 4" : "2", max = big ? 5 : 3;
     const libFor = LIB.filter((b) => b.for === "both" || b.for === (big ? "big" : "little"));
     const groups = [...new Set(libFor.map((b) => b.group))];
-    return `<section class="card" style="--kid:${esc(k.look.color)}">
+      return `<section class="card" style="--kid:${esc(k.look.color)}">
       <div class="row"><div class="m" style="width:96px;height:96px">${monsterSvg(k.look, wornBy(k), 1)}</div>
         <div class="stack" style="flex:1"><label class="field">Name<input id="nm${ki}" data-k="${ki}" data-f="name" value="${esc(k.name)}"></label>
         <div class="row" style="gap:10px;flex-wrap:wrap"><label class="field" style="max-width:100px">Age<input id="ag${ki}" data-k="${ki}" data-f="age" type="number" min="1" max="16" value="${esc(k.age)}"></label>
@@ -2099,27 +2161,38 @@ function viewSettings() {
             return `<div class="libitem"><span class="e" aria-hidden="true">${b.icon}</span><div><b>${esc(b.label)}</b><p>${esc(b.why)}</p><div>${b.star ? '<span class="tag star">Suggested</span>' : ""}${b.fresh ? '<span class="tag new">New idea</span>' : ""}${b.lens.map((l) => `<span class="tag">${l}</span>`).join("")}</div></div><button class="btn small ${on ? "ghost" : ""}" data-lib="${ki}" data-id="${b.id}">${on ? "Remove" : "Add"}</button></div>`;
           }).join("")).join("")}
         </div></details></div>
+      <div class="row" style="justify-content:flex-end"><button class="btn small ghost" data-rmkid="${ki}">Remove ${esc(k.name || "child")}</button></div>
+    </section>`;
+    })() : `<div class="empty">No children yet.</div>`) + `<button class="btn" id="addKid">+ Add a child</button>`;
+  } else if (S.setPage === "rewards") {
+    body = setKidPicker(d) + (k ? `<section class="card" style="--kid:${esc(k.look.color)}"><h3 style="font-size:21px">${esc(k.name || "Child")}</h3>
       <div><h3 style="font-size:19px">Treats in the shop</h3><p class="meta" style="margin:2px 0 8px">Small everyday rewards ${esc(k.name || "they")} can buy. Keep at least one cheap enough to earn in a day.</p>
         <div class="list">${(k.rewards || []).map((t, ti) => `<div class="editrow"><input class="inp" style="text-align:center" aria-label="Icon" data-k="${ki}" data-arr="rewards" data-i="${ti}" data-f="icon" value="${esc(t.icon)}"><input class="inp" aria-label="Treat" data-k="${ki}" data-arr="rewards" data-i="${ti}" data-f="label" value="${esc(t.label)}"><input class="inp" aria-label="Cost in points" type="number" min="1" data-k="${ki}" data-arr="rewards" data-i="${ti}" data-f="cost" value="${esc(t.cost)}"><button class="x" data-rm="${ki}" data-arr="rewards" data-i="${ti}" aria-label="Remove">✕</button></div>`).join("")}</div>
         <button class="btn small" style="margin-top:8px" data-add="${ki}" data-arr="rewards">+ Add treat</button></div>
       <div><h3 style="font-size:19px">Reward goals</h3><p class="meta" style="margin:2px 0 8px">Bigger rewards unlocked by total Dojos earned. Spending Dojo $ in the shop doesn't count against them.</p>
         <div class="list">${(k.milestones || []).map((m, mi) => `<div class="editrow"><input class="inp" style="text-align:center" aria-label="Icon" data-k="${ki}" data-arr="milestones" data-i="${mi}" data-f="icon" value="${esc(m.icon)}"><input class="inp" aria-label="Reward" data-k="${ki}" data-arr="milestones" data-i="${mi}" data-f="label" value="${esc(m.label)}"><input class="inp" aria-label="Points needed" type="number" min="1" data-k="${ki}" data-arr="milestones" data-i="${mi}" data-f="at" value="${esc(m.at)}"><button class="x" data-rm="${ki}" data-arr="milestones" data-i="${mi}" aria-label="Remove">✕</button></div>`).join("")}</div>
         <button class="btn small" style="margin-top:8px" data-add="${ki}" data-arr="milestones">+ Add goal</button></div>
-      <div class="row" style="justify-content:flex-end"><button class="btn small ghost" data-rmkid="${ki}">Remove ${esc(k.name || "child")}</button></div>
-    </section>`;
-  }).join("")}
-  <button class="btn" id="addKid">+ Add a child</button>
-  <section class="card"><h3 style="font-size:19px">🛠 Admin mode</h3><p class="meta" style="margin:0">For grown-ups: adds an 🛠 Admin tab to each child where you can give or take away any shop item, pet, house or furniture, mystery egg prizes, today's game tries and high scores. You can also try any game; admin games don't use up the children's games or change their high scores. It stays on until you turn it off or close the app.</p>
-    <div class="row"><button class="btn ${S.adminPlay ? "ghost" : "primary"}" id="adminTgl">${S.adminPlay ? "Turn admin mode off" : "Turn admin mode on"}</button></div></section>
+    </section>` : "") + `
+  <section class="card"><h3 style="font-size:19px">Team jar</h3><p class="meta" style="margin:0">A family treat the children fill together. Every Dojo either of them earns adds a marble.</p>
+    <div class="editrow"><input class="inp" style="text-align:center" aria-label="Icon" id="tmIc" value="${esc((d.team || TEAM_DEFAULT).icon)}"><input class="inp" aria-label="Treat" id="tmLb" value="${esc((d.team || TEAM_DEFAULT).label)}"><input class="inp" aria-label="Dojos to fill the jar" id="tmTg" type="number" min="5" max="500" value="${esc((d.team || TEAM_DEFAULT).target)}"></div></section>
+`;
+  } else if (S.setPage === "games") {
+    body = `
   <section class="card"><h3 style="font-size:19px">🎮 Games</h3><p class="meta" style="margin:0">Little games that unlock as monsters level up. They never give Dojos.</p>
     <label class="row" style="gap:8px;font-weight:700"><input type="checkbox" id="gmOn" ${(d.games || {}).on === false ? "" : "checked"}> Games on</label>
     <label class="field" style="max-width:260px">Games per child per day (0 = no limit)<input id="gmLim" type="number" min="0" max="50" value="${esc((d.games || {}).limit == null ? 3 : d.games.limit)}"></label></section>
-  <section class="card"><h3 style="font-size:19px">Team jar</h3><p class="meta" style="margin:0">A family treat the children fill together. Every Dojo either of them earns adds a marble.</p>
-    <div class="editrow"><input class="inp" style="text-align:center" aria-label="Icon" id="tmIc" value="${esc((d.team || TEAM_DEFAULT).icon)}"><input class="inp" aria-label="Treat" id="tmLb" value="${esc((d.team || TEAM_DEFAULT).label)}"><input class="inp" aria-label="Dojos to fill the jar" id="tmTg" type="number" min="5" max="500" value="${esc((d.team || TEAM_DEFAULT).target)}"></div></section>
+  <section class="card"><h3 style="font-size:19px">🛠 Admin mode</h3><p class="meta" style="margin:0">For grown-ups: adds an 🛠 Admin tab to each child where you can give or take away any shop item, pet, house or furniture, mystery egg prizes, today's game tries and high scores. You can also try any game; admin games don't use up the children's games or change their high scores. It stays on until you turn it off or close the app.</p>
+    <div class="row"><button class="btn ${S.adminPlay ? "ghost" : "primary"}" id="adminTgl">${S.adminPlay ? "Turn admin mode off" : "Turn admin mode on"}</button></div></section>
+`;
+  } else if (S.setPage === "family") {
+    body = famCard();
+  } else if (S.setPage === "device") {
+    body = `
   <section class="card"><h3 style="font-size:19px">Parent PIN</h3><p class="meta" style="margin:0">Useful on a shared tablet: locks settings, treats and goal sign-off so little fingers can't. Leave blank for no PIN.</p>
     <input class="inp" id="pinIn" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" placeholder="4 digits" value="${esc(d.pin || "")}" style="max-width:160px"></section>
-  ${viewFamilyPanel()}
-  </div>`;
+` + backupCard() + deviceCard();
+  }
+  return top + `<div class="list" style="gap:18px">${body}</div>`;
 }
 
 /* ---------- home menu: Kids' play, Parents and Set up ---------- */
@@ -2151,6 +2224,7 @@ function viewMenu() {
     ${tile("goKids", "🎮", "Kids' play", "Play with your monster, island and games. Nothing can be given or changed.")}
     ${tile("goParents", "🧑‍🧑‍🧒", "Parents", "Give Dojos, spend treats, see the week and change settings.", true)}
     ${isAdminRole() ? tile("goSetup", "🧭", "Set up", "Answer a few questions to choose behaviours, big rewards and treats.", true) : ""}
+    ${tile("goSettings", "⚙️", "Settings", isAdminRole() ? "Children, rewards, games, family invites and backups." : "Your name, this device and signing out.", isAdminRole())}
     <button class="btn ghost" id="guideBtn" style="justify-self:center">📖 Carers' guide</button></div>`;
 }
 
@@ -2260,6 +2334,34 @@ function soundIcon() {
   const mb = $("#menuBtn"); if (mb) mb.hidden = S.phase !== "app" || S.view === "menu" || !(S.cfg && (S.cfg.kids || []).length);
   b.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/>${on ? '<path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/>' : '<path d="m22 9-6 6M16 9l6 6"/>'}</svg>`;
 }
+// What's new: newest first. Add an entry with every update; v matches VERSION in sw.js.
+const WHATS_NEW = [
+  { v: "home-dojo-v29", date: "17 Oct 2026", items: [
+    "A brighter, lighter look with soft pastel colours, the same on every phone.",
+    "Settings is now on the home screen (with the parent PIN), split into short pages: Children, Rewards, Games, Family and This device.",
+    "Inviting someone is easier: the invite is a ready-made message with simple steps, and the link joins them to the family automatically.",
+    "New people get a welcome screen showing how to add the app to their home screen.",
+    "This \"What's new\" screen pops up after each update. Open it again any time from Settings, under This device."
+  ] }
+];
+function whatsNewHtml(list) {
+  return `<div style="font-size:44px;line-height:1">✨</div><h2>What's new</h2>
+    ${list.map((n) => `<div class="news">${list.length > 1 ? `<div class="meta" style="font-weight:700">${esc(n.date)}</div>` : ""}<ul>${n.items.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></div>`).join("")}
+    <button class="btn primary" id="newsOk">Got it!</button>`;
+}
+function showWhatsNew(list) { modal(whatsNewHtml(list), () => { $("#newsOk").onclick = closeModal; }); }
+// After an update, show what changed since this device last looked. A brand-new install just remembers the version.
+function maybeWhatsNew() {
+  if (HOST || S.newsChecked) return;
+  S.newsChecked = true;
+  const seen = lget("hd.seenVersion", null), top = WHATS_NEW[0];
+  lset("hd.seenVersion", top.v);
+  if (!seen || seen === top.v) return;
+  const i = WHATS_NEW.findIndex((n) => n.v === seen);
+  const fresh = WHATS_NEW.slice(0, i < 0 ? 3 : Math.min(i, 3));
+  if (fresh.length) setTimeout(() => { if (!$("#overlay").innerHTML) showWhatsNew(fresh); }, 600);
+}
+
 function render() {
   soundIcon(); syncDot();
   $("#brand").innerHTML = esc(S.phase === "app" && S.family ? S.family.name : "Home Dojo") + (S.phase === "app" && S.view !== "menu" ? ` <span class="modechip ${S.view}">${S.view === "kids" ? "Kids' play" : "Parents"}</span>` : "");
@@ -2280,6 +2382,7 @@ function render() {
   if (adminPlay() && S.phase === "app" && r.name !== "settings") html = `<div class="adminbar" role="status"><span>🛠 Admin mode: everything is editable</span><button class="btn small ghost" id="adminOff">Turn off</button></div>` + html;
   const key = S.phase + "|" + html.replace(/ id="m\d+[a-z]?"| url\(#m\d+[a-z]?\)|clip-path="url\(#m\d+c\)"/g, "");
   S.lastRoute = S.phase === "app" ? r.name : S.phase;
+  if (S.phase === "app" && S.cfgLoaded) maybeWhatsNew();
   if (key === S.lastHtml) return;
   S.lastHtml = key;
   const y = window.scrollY;
@@ -2308,9 +2411,9 @@ function wire() {
     try {
       if (S.authTab === "signup") {
         const name = $("#aName").value.trim(); if (!name) { btn.disabled = false; return fail("Add your name so the family knows who gave each point."); }
-        const r = await sb.auth.signUp({ email, password: pass, options: { data: { name }, emailRedirectTo: location.origin + location.pathname + (inviteFromLink ? "?invite=" + inviteFromLink : "") } });
+        const r = await sb.auth.signUp({ email, password: pass, options: { data: { name }, emailRedirectTo: location.origin + location.pathname + inviteQuery() } });
         if (r.error) throw r.error;
-        if (!r.data.session) { btn.disabled = false; S.authTab = "signin"; rerender(); return toast("Check your email and tap the link to confirm, then sign in here."); }
+        if (!r.data.session) { btn.disabled = false; S.authTab = "signin"; rerender(); return modal(`<div style="font-size:44px;line-height:1">📬</div><h2>Check your email</h2><p class="meta">We sent a link to <b>${esc(email)}</b>. Tap it to confirm${inviteFromLink ? " and you'll join the family straight away" : ", then sign in here"}.</p><p class="meta">It can take a few minutes, and sometimes lands in Junk or Spam.</p><button class="btn primary" id="okMail">OK</button>`, () => { $("#okMail").onclick = closeModal; }); }
         await afterSignIn(r.data.session.user);
       } else {
         const r = await sb.auth.signInWithPassword({ email, password: pass });
@@ -2332,9 +2435,9 @@ function wire() {
     if (!code || !name) { err.textContent = "Add the invite code and your name."; err.hidden = false; return; }
     const r = await sb.rpc("join_family", { p_code: code, p_display: name });
     if (r.error) { err.textContent = r.error.message; err.hidden = false; return; }
-    if (inviteFromLink) history.replaceState(null, "", location.pathname);
+    if (inviteFromLink) { history.replaceState(null, "", location.pathname); ldel("hd.invite"); }
     await afterSignIn(S.user);
-    toast("Welcome to the family!");
+    welcomeJoined();
   };
   const nf = $("#newForm");
   if (nf) nf.onsubmit = async (e) => {
@@ -2412,6 +2515,7 @@ function wire() {
   if (S.route.name === "setup" && S.phase === "app") wireWizard();
   on("#goKids", enterKids); on("#goParents", () => enterParents());
   on("#goSetup", () => enterParents(() => { startWizard(); go({ name: "setup" }); }));
+  on("#goSettings", () => isAdminRole() ? enterParents(openSettings) : openSettings());
   if (isl() && S.phase === "app" && S.cfg) isl().wireAll();
 }
 
@@ -2423,13 +2527,16 @@ function wireSettings() {
   v.querySelectorAll("[data-invite]").forEach((b) => b.onclick = () => createInvite(b.dataset.invite));
   v.querySelectorAll("[data-rmmember]").forEach((b) => b.onclick = () => removeMember(S.members.find((m) => m.user_id === b.dataset.rmmember)));
   on("#bkDown", downloadBackup);
+  on("#newsBtn", () => showWhatsNew(WHATS_NEW.slice(0, 3)));
   on("#bkUp", pickBackupFile);
   const md = $("#muteDev"); if (md) md.onchange = () => { lset("hd.mute", md.checked); soundIcon(); };
   on("#signOutBtn", () => confirmBox("Sign out?", "You'll need your email and password to sign back in on this device.", "Sign out", () => sb.auth.signOut()));
   on("#leaveLocal", () => confirmBox("Leave try-it-out mode?", "Points saved on this device stay here in case you come back.", "Leave", () => { ldel("hd.localMode"); location.reload(); }));
   on("#installBtn", async () => { if (!deferredInstall) return; deferredInstall.prompt(); deferredInstall = null; });
-  on("#setCancel", () => { S.draft = null; go({ name: "home" }); });
+  on("#setCancel", () => { S.draft = null; S.setPage = null; go({ name: "home" }); });
   if (!isAdmin()) return;
+  v.querySelectorAll("[data-setpage]").forEach((b) => b.onclick = () => { S.setPage = b.dataset.setpage || null; rerender(); window.scrollTo(0, 0); });
+  v.querySelectorAll("[data-setkid]").forEach((b) => b.onclick = () => { S.setKid = +b.dataset.setkid; rerender(); });
 
   const redraw = () => rerender();
   v.querySelectorAll("input[data-k]").forEach((inp) => inp.oninput = inp.onchange = () => {
@@ -2455,7 +2562,7 @@ function wireSettings() {
     const ki = +b.dataset.rmkid, k = d.kids[ki];
     confirmBox(`Remove ${k.name}?`, "Their monster and settings go when you save. Their point history stays, in case you add them back.", "Remove", () => { d.kids.splice(ki, 1); redraw(); });
   });
-  on("#addKid", () => { d.kids.push(starterKid("New child", 6, d.kids.length)); redraw(); });
+  on("#addKid", () => { d.kids.push(starterKid("New child", 6, d.kids.length)); S.setKid = d.kids.length - 1; redraw(); });
   const tm = (f, el) => { d.team = Object.assign({ startAt: Date.now() }, TEAM_DEFAULT, d.team); d.team[f] = el.type === "number" ? Math.max(5, parseInt(el.value, 10) || 30) : el.value; };
   [["icon", "#tmIc"], ["label", "#tmLb"], ["target", "#tmTg"]].forEach(([f, sel]) => { const el = $(sel); if (el) el.oninput = () => tm(f, el); });
   const adT = $("#adminTgl"); if (adT) adT.onclick = () => { S.adminPlay = !S.adminPlay; adT.textContent = S.adminPlay ? "Turn admin mode off" : "Turn admin mode on"; adT.className = "btn " + (S.adminPlay ? "ghost" : "primary"); toast(S.adminPlay ? "Admin mode on: open a child and use the 🛠 Admin tab." : "Admin mode off."); };
@@ -2468,7 +2575,7 @@ function wireSettings() {
     // keep whatever the monsters are wearing now (a carer may have changed it meanwhile)
     d.kids.forEach((k) => { const live = kidById(k.id); if (live) { k.equip = live.equip || {}; k.look = live.look || k.look; k.monsterName = live.monsterName || ""; k.shelf = live.shelf || []; k.eggs = live.eggs || 0; k.plays = live.plays; k.best = live.best; k.island = live.island; } });
     d.familyIsland = S.cfg.familyIsland;
-    const cfg = clone(d); S.draft = null; S.route = { name: "home" };
+    const cfg = clone(d); S.draft = null; S.setPage = null; S.route = { name: "home" };
     saveCfg(cfg); rerender(); window.scrollTo(0, 0); toast("Settings saved");
   });
 }
@@ -2489,10 +2596,10 @@ $("#menuBtn").onclick = () => { if (S.phase === "app") { S.wiz = null; S.draft =
 // Parents locks itself after 10 minutes without a tap, in case the tablet gets handed over.
 document.addEventListener("pointerdown", () => { S.touchAt = Date.now(); }, true);
 setInterval(() => { if (S.view === "parents" && Date.now() - (S.touchAt || 0) > 10 * 60 * 1000 && !S.draft && !S.wiz) { toMenu(); toast("Parents locked after 10 quiet minutes."); } }, 30000);
+function openSettings() { S.draft = S.cfg ? clone(S.cfg) : { version: 1, sound: true, pin: "", kids: [] }; S.draft.kids.forEach((k) => { k.rewards = k.rewards || []; k.milestones = k.milestones || []; k.behaviours = k.behaviours || []; k.look = k.look || {}; }); S.setPage = null; go({ name: "settings" }); }
 $("#setBtn").onclick = () => {
   if (S.phase !== "app" || S.view !== "parents") return;
-  const open = () => { S.draft = S.cfg ? clone(S.cfg) : { version: 1, sound: true, pin: "", kids: [] }; S.draft.kids.forEach((k) => { k.rewards = k.rewards || []; k.milestones = k.milestones || []; k.behaviours = k.behaviours || []; k.look = k.look || {}; }); go({ name: "settings" }); };
-  isAdmin() ? requirePin(open) : open();
+  isAdmin() ? requirePin(openSettings) : openSettings();
 };
 $("#soundBtn").onclick = () => { const m = !lget("hd.mute", false); lset("hd.mute", m); soundIcon(); if (!m) beep([[880, .15, 0]]); };
 
