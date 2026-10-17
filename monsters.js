@@ -279,12 +279,12 @@ function monsterSvg(look, equip, level) {
     else s += `<rect x="92" y="${m + 1}" width="7" height="6" rx="1.5" fill="#fff"/>`;
   }
   // accessories
-  if ((equip.acc === "glasses" || equip.acc === "shades") && eyes.length === 2) {
-    const x0 = Math.min(...eyes.map((e) => e[0] - e[2])) - 9, x1 = Math.max(...eyes.map((e) => e[0] + e[2])) + 9, w = x1 - x0, cy = eyes[0][1];
-    s += pic(equip.acc, x0 - w * .12, cy - w * .32, w * 1.24, w * .64);
-  } else {
-    if (equip.acc === "glasses") { for (const [x, y, r] of eyes) s += `<circle cx="${x}" cy="${y}" r="${r + 5}" fill="none" stroke="${ink}" stroke-width="3.5"/>`; for (let i = 0; i < eyes.length - 1; i++) s += `<path d="M${eyes[i][0] + eyes[i][2] + 5} ${eyes[i][1]} L${eyes[i + 1][0] - eyes[i + 1][2] - 5} ${eyes[i + 1][1]}" stroke="${ink}" stroke-width="3.5"/>`; }
-    if (equip.acc === "shades") { for (const [x, y, r] of eyes) s += `<rect x="${x - r - 6}" y="${y - r * 0.8}" width="${2 * r + 12}" height="${r * 1.6 + 2}" rx="${r * 0.7}" fill="${ink}"/><path d="M${x - r} ${y - r * 0.3} l${r * 0.6} -${r * 0.3}" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity=".8"/>`; s += `<path d="M${eyes[0][0] - eyes[0][2] - 6} ${eyes[0][1] - 3} H${eyes[eyes.length - 1][0] + eyes[eyes.length - 1][2] + 6}" stroke="${ink}" stroke-width="4"/>`; }
+  if (equip.acc === "glasses" || equip.acc === "shades") {
+    // one picture per eye count: two lenses, or the one- and three-lens versions
+    const id = equip.acc, cy = eyes.reduce((a, e) => a + e[1], 0) / eyes.length;
+    if (eyes.length === 2) { const x0 = Math.min(...eyes.map((e) => e[0] - e[2])) - 9, w = Math.max(...eyes.map((e) => e[0] + e[2])) + 9 - x0; s += pic(id, x0 - w * .12, cy - w * .32, w * 1.24, w * .64); }
+    else if (eyes.length === 1) { const w = (eyes[0][2] * 2 + 12) / .45; s += pic(id + "1", 100 - w * .57, cy - w * .26, w, w * .52); }
+    else { const w = 100; s += pic(id + "3", 100 - w / 2, cy - 7 - w * .22, w, w * .44); }
   }
   if (equip.acc === "bandana") { const w = G.rx * 1.35; s += pic("bandana", 100 - w / 2, G.neck - 22, w, w * .75, "xMidYMin"); }
   if (equip.acc === "bowtie") s += pic("bowtie", 66, G.neck - 20, 68, 36);
