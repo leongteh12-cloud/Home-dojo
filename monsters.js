@@ -219,8 +219,10 @@ function monsterSvg(look, equip, level) {
   if (equip.bg) s += bgSvg(equip.bg, gid);
   if (level >= 5) s += `<circle cx="100" cy="${mid}" r="98" fill="url(#${gid}a)"/>`;
   if (level >= 4) s += `<path d="M${100 - G.rx + 10} ${mid - 10} Q${100 - G.rx - 40} ${mid - 50} ${100 - G.rx - 30} ${mid + 10} Q${100 - G.rx - 14} ${mid} ${100 - G.rx + 10} ${mid + 14}Z" fill="${light}" opacity=".9"/><path d="M${100 + G.rx - 10} ${mid - 10} Q${100 + G.rx + 40} ${mid - 50} ${100 + G.rx + 30} ${mid + 10} Q${100 + G.rx + 14} ${mid} ${100 + G.rx - 10} ${mid + 14}Z" fill="${light}" opacity=".9"/>`;
-  if (equip.acc === "jetpack") { for (const x of [100 - G.rx - 12, 100 + G.rx - 10]) s += `<path d="M${x + 2} ${G.neck + 18} q9 28 18 0 q-4 14 -9 22 q-5 -8 -9 -22z" fill="#FF8A2A"/><path d="M${x + 6} ${G.neck + 18} q5 14 10 0z" fill="#FFE14D"/><rect x="${x}" y="${G.neck - 46}" width="22" height="64" rx="10" fill="#B8C4D0" stroke="#6D7A8C" stroke-width="3"/><rect x="${x}" y="${G.neck - 30}" width="22" height="8" fill="#E63946"/><rect x="${x + 4}" y="${G.neck + 14}" width="14" height="6" rx="2" fill="#6D7A8C"/>`; }
-  if (equip.acc === "cape") s += `<path d="M${100 - G.rx * 0.7} ${G.neck - 10} Q100 ${G.neck} ${100 + G.rx * 0.7} ${G.neck - 10} L${100 + G.rx + 8} ${G.bot + 2} Q100 ${G.bot + 12} ${100 - G.rx - 8} ${G.bot + 2}Z" fill="#E23B4E"/>`;
+  // worn pictures: the shop picture fitted to this monster's shape
+  const pic = (id, x, y, w, h, align) => `<image href="${shopArt(id)}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" preserveAspectRatio="${align || "xMidYMid"} meet"/>`;
+  if (equip.acc === "jetpack") { const w = G.rx * 2.5; s += pic("jetpack", 100 - w / 2, G.neck - w * 0.62, w, w); }
+  if (equip.acc === "cape") s += `<path d="M${100 - G.rx * 0.7} ${G.neck - 10} Q100 ${G.neck} ${100 + G.rx * 0.7} ${G.neck - 10} L${100 + G.rx + 10} ${G.bot + 4} Q100 ${G.bot + 14} ${100 - G.rx - 10} ${G.bot + 4}Z" fill="#2F86D8" stroke="#16314F" stroke-width="3" stroke-linejoin="round"/><path d="M${100 + G.rx * 0.55} ${G.bot - 30} l-8 14 h7 l-5 12 l13 -17 h-7 l5 -9z" fill="#FFD43B" stroke="#16314F" stroke-width="1.5"/>`;
   // top features (behind body)
   if (sp === "dragon") {
     s += `<path d="M${100 + G.rx - 12} ${G.bot - 18} Q${100 + G.rx + 34} ${G.bot - 6} ${100 + G.rx + 30} ${G.bot - 46} L${100 + G.rx + 42} ${G.bot - 52} L${100 + G.rx + 26} ${G.bot - 60} Q${100 + G.rx + 18} ${G.bot - 24} ${100 + G.rx - 16} ${G.bot - 34}Z" fill="${col}" stroke="${dark}" stroke-width="2"/>`;
@@ -250,12 +252,9 @@ function monsterSvg(look, equip, level) {
   else if (look.belly === "heart") { const hy = G.mouth + 30; s += `<path d="M100 ${hy + 18} C80 ${hy + 4} 80 ${hy - 12} 92 ${hy - 12} C97 ${hy - 12} 100 ${hy - 8} 100 ${hy - 4} C100 ${hy - 8} 103 ${hy - 12} 108 ${hy - 12} C120 ${hy - 12} 120 ${hy + 4} 100 ${hy + 18}Z" fill="#fff" opacity=".35"/>`; }
   if (sp === "dragon") for (let y = G.mouth + 14; y < G.bot; y += 10) s += `<path d="M${100 - G.rx * 0.45} ${y} Q100 ${y + 5} ${100 + G.rx * 0.45} ${y}" stroke="${dark}" stroke-width="2" fill="none" opacity=".35"/>`;
   if (level >= 2) s += `<circle cx="${100 - G.rx * 0.6}" cy="${G.top + 30}" r="7" fill="${dark}" opacity=".3"/><circle cx="${100 + G.rx * 0.62}" cy="${G.top + 40}" r="5" fill="${dark}" opacity=".3"/><circle cx="${100 + G.rx * 0.5}" cy="${G.bot - 30}" r="6" fill="${dark}" opacity=".3"/>`;
-  if (equip.skin === "stripes") for (let y = G.top + 8; y < G.bot; y += 20) s += `<rect x="0" y="${y}" width="200" height="8" fill="${dark}" opacity=".3"/>`;
-  if (equip.skin === "stars") s += star(70, G.top + 28, 7, "#fff", .6) + star(132, G.top + 36, 6, "#fff", .6) + star(60, G.bot - 30, 5, "#fff", .6) + star(140, G.bot - 26, 7, "#fff", .6);
-  if (equip.skin === "rainbow") s += `<rect x="0" y="${G.top}" width="200" height="${G.bot - G.top}" fill="url(#${gid}r)" opacity=".55"/>`;
-  if (equip.skin === "spots") s += [[72, 22, 9], [128, 30, 7], [58, 58, 6], [142, 64, 9], [86, 76, 6], [118, 88, 8], [70, 98, 7]].map(([x, dy, r]) => `<circle cx="${x}" cy="${G.top + dy}" r="${r}" fill="${dark}" opacity=".35"/>`).join("");
-  if (equip.skin === "galaxy") s += `<rect x="0" y="${G.top - 10}" width="200" height="${G.bot - G.top + 20}" fill="#2A1A6E" opacity=".78"/><ellipse cx="100" cy="${mid}" rx="${G.rx}" ry="16" fill="#C77DFF" opacity=".35" transform="rotate(-20 100 ${mid})"/>` + [[66, 20, 4], [130, 28, 5], [84, 56, 3], [148, 70, 3.5], [60, 82, 4.5], [118, 96, 3], [96, 34, 2.5]].map(([x, dy, r]) => star(x, G.top + dy, r, "#FFFFFF", .9)).join("") + `<circle cx="138" cy="${G.top + 48}" r="6" fill="#FF8A5B" opacity=".9"/>`;
-  if (equip.skin === "gold") s += star(68, G.top + 30, 6, "#fff", .8) + star(134, G.bot - 34, 5, "#fff", .8);
+  // skins: the shop orb's pattern, stretched over the body
+  if (equip.skin) { const sz = 2.3 * Math.max(G.rx, (G.bot - G.top) / 2), op = { spots: .55, stripes: .6, stars: .85, rainbow: .75, gold: .85, galaxy: .95 }[equip.skin] || .7;
+    s += `<image href="${shopArt(equip.skin)}" x="${(100 - sz / 2).toFixed(1)}" y="${(mid - sz / 2).toFixed(1)}" width="${sz.toFixed(1)}" height="${sz.toFixed(1)}" preserveAspectRatio="xMidYMid slice" opacity="${op}"/>`; }
   // a soft shine on the top left, and a gentle outline
   s += `<ellipse cx="${100 - G.rx * .42}" cy="${G.top + 24}" rx="${G.rx * .2}" ry="10" fill="#fff" opacity=".28" transform="rotate(-30 ${100 - G.rx * .42} ${G.top + 24})"/>`;
   s += `</g>`;
@@ -280,12 +279,18 @@ function monsterSvg(look, equip, level) {
     else s += `<rect x="92" y="${m + 1}" width="7" height="6" rx="1.5" fill="#fff"/>`;
   }
   // accessories
-  if (equip.acc === "glasses") { for (const [x, y, r] of eyes) s += `<circle cx="${x}" cy="${y}" r="${r + 5}" fill="none" stroke="${ink}" stroke-width="3.5"/>`; for (let i = 0; i < eyes.length - 1; i++) s += `<path d="M${eyes[i][0] + eyes[i][2] + 5} ${eyes[i][1]} L${eyes[i + 1][0] - eyes[i + 1][2] - 5} ${eyes[i + 1][1]}" stroke="${ink}" stroke-width="3.5"/>`; }
-  if (equip.acc === "shades") { for (const [x, y, r] of eyes) s += `<rect x="${x - r - 6}" y="${y - r * 0.8}" width="${2 * r + 12}" height="${r * 1.6 + 2}" rx="${r * 0.7}" fill="${ink}"/><path d="M${x - r} ${y - r * 0.3} l${r * 0.6} -${r * 0.3}" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity=".8"/>`; s += `<path d="M${eyes[0][0] - eyes[0][2] - 6} ${eyes[0][1] - 3} H${eyes[eyes.length - 1][0] + eyes[eyes.length - 1][2] + 6}" stroke="${ink}" stroke-width="4"/>`; }
-  if (equip.acc === "bandana") s += `<path d="M${100 - G.rx * 0.62} ${G.neck - 8} H${100 + G.rx * 0.62} L100 ${G.neck + 22}Z" fill="#E63946" stroke="#B5203A" stroke-width="2" stroke-linejoin="round"/><circle cx="88" cy="${G.neck - 1}" r="2.2" fill="#fff"/><circle cx="104" cy="${G.neck + 4}" r="2.2" fill="#fff"/><circle cx="112" cy="${G.neck - 3}" r="2.2" fill="#fff"/><circle cx="98" cy="${G.neck + 12}" r="2.2" fill="#fff"/>`;
-  if (equip.acc === "bowtie") s += `<path d="M100 ${G.neck} L82 ${G.neck - 10} L82 ${G.neck + 10}Z M100 ${G.neck} L118 ${G.neck - 10} L118 ${G.neck + 10}Z" fill="#E23B4E"/><circle cx="100" cy="${G.neck}" r="5" fill="#B5203A"/>`;
-  if (equip.acc === "scarf") s += `<rect x="${100 - G.rx * 0.78}" y="${G.neck - 8}" width="${G.rx * 1.56}" height="15" rx="7" fill="#3D7BFF"/><rect x="${100 + G.rx * 0.25}" y="${G.neck}" width="14" height="32" rx="5" fill="#3D7BFF"/><path d="M${100 - G.rx * 0.5} ${G.neck - 8} v15 M100 ${G.neck - 8} v15 M${100 + G.rx * 0.5} ${G.neck - 8} v15" stroke="#fff" stroke-width="3" opacity=".7"/>`;
-  s += hatPart(equip.hat, G.top);
+  if ((equip.acc === "glasses" || equip.acc === "shades") && eyes.length === 2) {
+    const x0 = Math.min(...eyes.map((e) => e[0] - e[2])) - 9, x1 = Math.max(...eyes.map((e) => e[0] + e[2])) + 9, w = x1 - x0, cy = eyes[0][1];
+    s += pic(equip.acc, x0 - w * .12, cy - w * .32, w * 1.24, w * .64);
+  } else {
+    if (equip.acc === "glasses") { for (const [x, y, r] of eyes) s += `<circle cx="${x}" cy="${y}" r="${r + 5}" fill="none" stroke="${ink}" stroke-width="3.5"/>`; for (let i = 0; i < eyes.length - 1; i++) s += `<path d="M${eyes[i][0] + eyes[i][2] + 5} ${eyes[i][1]} L${eyes[i + 1][0] - eyes[i + 1][2] - 5} ${eyes[i + 1][1]}" stroke="${ink}" stroke-width="3.5"/>`; }
+    if (equip.acc === "shades") { for (const [x, y, r] of eyes) s += `<rect x="${x - r - 6}" y="${y - r * 0.8}" width="${2 * r + 12}" height="${r * 1.6 + 2}" rx="${r * 0.7}" fill="${ink}"/><path d="M${x - r} ${y - r * 0.3} l${r * 0.6} -${r * 0.3}" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity=".8"/>`; s += `<path d="M${eyes[0][0] - eyes[0][2] - 6} ${eyes[0][1] - 3} H${eyes[eyes.length - 1][0] + eyes[eyes.length - 1][2] + 6}" stroke="${ink}" stroke-width="4"/>`; }
+  }
+  if (equip.acc === "bandana") { const w = G.rx * 1.35; s += pic("bandana", 100 - w / 2, G.neck - 22, w, w * .75, "xMidYMin"); }
+  if (equip.acc === "bowtie") s += pic("bowtie", 66, G.neck - 20, 68, 36);
+  if (equip.acc === "scarf") { const w = G.rx * 1.6; s += pic("scarf", 100 - w / 2, G.neck - 26, w, w * .85, "xMidYMin"); }
+  if (equip.hat === "flower") s += pic("flower", 104, G.top - 22, 44, 44);
+  else if (equip.hat) { const w = Math.min(G.rx * 1.75, 110); s += pic(equip.hat, 100 - w / 2, G.top + 20 - w * .8, w, w * .8, "xMidYMax"); }
   if (equip.pet) s += `<g transform="translate(166 172) scale(.95)">${petSvg(equip.pet)}</g>`;
   if (level >= 3) s += star(100 + G.rx + 12, G.top + 4, 8, "#FFD43B") + star(100 - G.rx - 10, G.top + 30, 6, "#FFD43B");
   return s + `</svg>`;
