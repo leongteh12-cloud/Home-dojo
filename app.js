@@ -633,7 +633,18 @@ function buyTreat(kid, t) {
 }
 function markGiven(kid, m) {
   if (!isAdmin()) return toast("A parent can mark this as given.");
-  requirePin(() => { addRecord({ kid: kid.id, kind: "given", mid: m.id, label: m.label, icon: m.icon || "🎁", pts: 0, at: Date.now() }); toast(`Marked as given: ${m.label}`); });
+  requirePin(() => { const id = addRecord({ kid: kid.id, kind: "given", mid: m.id, label: m.label, icon: m.icon || "🎁", pts: 0, at: Date.now() }); SND.earn(); toast(`Redeemed: ${m.label} ✓`, () => removeRecord(id)); });
+}
+// Big rewards a child has won: ready ones wait for a grown-up to tick them off; redeemed ones stay as achievements.
+function rewardsOf(kid) { return trophiesFor(kid).filter((t) => t.group === "goal" && t.at).map((t) => ({ m: t.m, won: t.at, given: t.given })); }
+function rewardsCard(kid, parent, readyOnly) {
+  const r = rewardsOf(kid); if (!r.length) return "";
+  const day = (t) => new Date(t).toLocaleDateString([], { day: "numeric", month: "short" });
+  const ready = r.filter((x) => !x.given), done = readyOnly ? [] : r.filter((x) => x.given).reverse();
+  return `<section class="rewards"><h3>🎁 ${parent ? `${esc(kid.name)}'s rewards` : "My rewards"}</h3>
+    ${ready.map((x) => `<div class="rwd ready"><span class="ri" aria-hidden="true">${esc(x.m.icon || "🎁")}</span><div class="rt"><b>${esc(x.m.label)}</b><small>Won ${day(x.won)}! ${parent ? "Ready to redeem." : "Ask a grown-up! 🎉"}</small></div>${parent ? `<button class="btn small primary" data-redeem="${esc(kid.id)}|${esc(x.m.id)}">✓ Redeemed</button>` : `<span class="pill">Ready!</span>`}</div>`).join("")}
+    ${done.map((x) => `<div class="rwd done"><span class="ri" aria-hidden="true">${esc(x.m.icon || "🎁")}</span><div class="rt"><b>${esc(x.m.label)}</b><small>Achieved ${day(x.won)} · redeemed ${day(x.given)}</small></div><span class="tick" aria-label="Redeemed">✓</span></div>`).join("")}
+  </section>`;
 }
 
 /* ---------- backup + restore ---------- */
@@ -2033,12 +2044,13 @@ function viewHome() {
   const kids = S.cfg.kids || [];
   const last = lget("hd.lastBackup", 0);
   const nudge = isAdmin() && S.mode === "cloud" && S.awards.length > 20 && Date.now() - last > 30 * 864e5;
-  return `${viewLobby()}${viewTeam()}<div class="kids">${kids.map((k) => {
+  const toRedeem = kidsMode() || !isAdmin() ? [] : kids.filter((k) => rewardsOf(k).some((x) => !x.given));
+  return `${viewLobby()}${viewTeam()}${toRedeem.length ? `<div class="redeemhome">${toRedeem.map((k) => rewardsCard(k, true, true)).join("")}</div>` : ""}<div class="kids">${kids.map((k) => {
     const st = stats(k.id), ms = milestonesOf(k).find((m) => st.earned < m.at);
     const pct = ms ? Math.round(100 * st.earned / ms.at) : 100;
     return `<button class="kidcard" data-kid="${esc(k.id)}" style="--kid:${esc(k.look.color)}" aria-label="Open ${esc(k.name)}">
       <div class="m">${monsterSvg(k.look, dressedFor(k), st.level)}</div>
-      <div class="stack"><h2>${esc(k.name)} ${streakChip(k.id)}</h2>${wallet(st, true)}
+      <div class="stack"><h2>${esc(k.name)} ${streakChip(k.id)}${rewardsOf(k).some((x) => !x.given) ? ` <span class="pill rwdpill">🎁 Reward ready</span>` : ""}</h2>${wallet(st, true)}
       ${ms ? `<div class="bar" aria-hidden="true"><i style="width:${pct}%"></i></div><div class="meta">${ms.at - st.earned} to ${esc(ms.icon || "🎁")} ${esc(ms.label)}</div>` : `<div class="meta">Level ${st.level} monster</div>`}</div>
     </button>`;
   }).join("")}</div>
@@ -2100,7 +2112,7 @@ function viewKid(kid, tab) {
     const tile = (t) => `<button class="trophy${t.at ? "" : " locked"}" data-trophy="${esc(t.id)}"><div class="art">${trophyArt(t, !t.at)}</div><div class="n">${esc(t.at || t.group !== "goal" ? t.name : t.name)}</div><div class="d">${t.at ? (t.group === "goal" ? (t.given ? "Given ✓" : "Ready!") : new Date(t.at).toLocaleDateString([], { day: "numeric", month: "short" })) : esc(t.group === "goal" ? (t.m.at - st.earned) + " to go" : "Keep going")}</div></button>`;
     const group = (g, title, note) => { const items = all.filter((t) => t.group === g); return items.length ? `<div class="sect"><h3>${secTitle(title)}</h3>${note ? `<p>${note}</p>` : ""}</div><div class="case">${items.map(tile).join("")}</div>` : ""; };
     const treats = S.awards.filter((a) => a.kid === kid.id && a.kind === "spend" && a.bid !== "admin").slice().reverse();
-    body = (nx ? `<div class="goal"><div class="meta">Next big reward</div><div class="big">${esc(nx.icon || "🎁")} ${esc(nx.label)}</div><div class="bar"><i style="width:${Math.round(100 * st.earned / nx.at)}%"></i></div><div class="meta"><b class="price" style="color:var(--ink)">${st.earned}</b> of ${nx.at} Dojos earned. ${nx.at - st.earned} to go!</div><div class="meta">Spending Dojo $ in the shop never moves you backwards here.</div></div>`
+    body = rewardsCard(kid, isAdmin() && !kidsMode()) + (nx ? `<div class="goal"><div class="meta">Next big reward</div><div class="big">${esc(nx.icon || "🎁")} ${esc(nx.label)}</div><div class="bar"><i style="width:${Math.round(100 * st.earned / nx.at)}%"></i></div><div class="meta"><b class="price" style="color:var(--ink)">${st.earned}</b> of ${nx.at} Dojos earned. ${nx.at - st.earned} to go!</div><div class="meta">Spending Dojo $ in the shop never moves you backwards here.</div></div>`
       : ms.length ? `<div class="goal"><div class="big">All reward goals won! 🎉</div><div class="meta">A parent can add new goals in settings.</div></div>` : "") +
       `<div class="sect"><h3>⭐ My shelf</h3><p>Tap a trophy to show it off here and in the house</p></div>
       <div class="shelfbig">${shelf.length ? shelf.map(tile).join("") : `<p class="meta" style="margin:0">Nothing on the shelf yet. Tap any trophy you've won and choose "Put on my shelf".</p>`}</div>` +
@@ -2962,6 +2974,7 @@ function wire() {
   const gb = $("#guideBtn"); if (gb) gb.onclick = () => go({ name: "guide" });
   const qb = $("#quickBtn"); if (qb) qb.onclick = showQuickStart;
   const fbb = $("#fbBtn"); if (fbb) fbb.onclick = showFeedback;
+  document.querySelectorAll("[data-redeem]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); const [kid, mid] = b.dataset.redeem.split("|"); const k = kidById(kid), m = k && (k.milestones || []).find((x) => x.id === mid); if (m) markGiven(k, m); });
   const fbi = $("#fbInbox"); if (fbi) fbi.onclick = () => showFeedbackInbox();
   const gk = $("#guideBack"); if (gk) gk.onclick = () => go({ name: "home" });
   if (S.route.name === "settings" && S.phase === "app") wireSettings();

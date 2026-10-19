@@ -716,3 +716,15 @@ textarea.inp { min-height: 80px; resize: vertical; font: inherit; }
 .gbar { display: block; width: 52px; height: 6px; border-radius: 3px; background: #E2CFB6; overflow: hidden; }
 .gbar b { display: block; height: 100%; background: #5CC260; border-radius: 3px; }
 .item .shop-pic { width: 100%; height: 100%; object-fit: contain; display: block; }
+/* big rewards to redeem */
+.rewards { background: var(--surface); border: 2px solid var(--line); border-radius: 20px; padding: 14px; display: grid; gap: 8px; margin-block: 10px; }
+.rewards h3 { font-size: 19px; }
+.rwd { display: flex; align-items: center; gap: 10px; border-radius: 14px; padding: 10px 12px; }
+.rwd .ri { font-size: 30px; line-height: 1; }
+.rwd .rt { flex: 1; min-width: 0; display: grid; }
+.rwd .rt small { color: var(--muted); }
+.rwd.ready { background: linear-gradient(135deg, #FFF3C4, #FFE1B8); border: 2px solid #FFC75F; }
+.rwd.done { background: var(--surface-2); }
+.rwd .tick { width: 30px; height: 30px; border-radius: 50%; background: #4CBF5A; color: #fff; display: grid; place-items: center; font-weight: 800; }
+.rwdpill { background: #FFE1B8; color: #8A4B00; font-size: 12px; }
+.redeemhome { margin-top: 10px; }
