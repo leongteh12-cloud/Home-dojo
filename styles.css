@@ -768,3 +768,22 @@ textarea.inp { min-height: 80px; resize: vertical; font: inherit; }
   .rshow.open .rs-box { animation: none; opacity: 0; }
   .rshow.open .rs-prize, .rshow.open .rs-name, .rshow.open .rs-label, .rshow.open .rs-sub, .rshow.open .rs-m, .rshow.open .rs-note { animation: none; opacity: 1; transform: none; }
 }
+
+/* Parents home: each child's behaviour buttons under their card, for a one-tap Dojo. */
+.kidwrap { display: grid; gap: 8px; align-content: start; }
+.quickgive { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 8px; }
+.qbeh { display: grid; justify-items: center; gap: 2px; min-height: 64px; padding: 8px 6px; border: 2px solid color-mix(in srgb, var(--kid) 35%, transparent); border-radius: 16px; background: var(--surface); color: var(--ink); font: inherit; cursor: pointer; box-shadow: var(--shadow); }
+.qbeh span { font-size: 26px; line-height: 1; }
+.qbeh small { font-size: 12.5px; font-weight: 700; line-height: 1.15; text-align: center; }
+.qbeh:active { transform: scale(.95); }
+.qbeh.bonus { border-style: dashed; }
+
+/* Week page: how each behaviour is going over 8 weeks. */
+.trend { display: grid; gap: 8px; background: var(--surface); border-radius: 20px; padding: 14px; box-shadow: var(--shadow); }
+.trow { display: grid; grid-template-columns: minmax(0, 1fr) 96px 56px; gap: 10px; align-items: center; }
+.trow .tl { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spark { display: flex; align-items: flex-end; gap: 3px; height: 28px; }
+.spark i { flex: 1; background: var(--kid, var(--primary)); border-radius: 3px 3px 0 0; }
+.spark i.z { opacity: .25; }
+.tdir { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.tdir.up { color: #2E9A44; } .tdir.down { color: #C2410C; } .tdir.same { color: var(--muted, #6b7280); }

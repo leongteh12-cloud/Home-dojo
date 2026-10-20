@@ -117,9 +117,24 @@ function teardown() {
 
 function loadCache(fid) {
   const c = lget("hd.cache." + fid, null);
-  if (c) { S.cfg = c.cfg; S.awards = c.awards || []; S.members = c.members || []; S.cfgLoaded = true; }
+  if (c) { S.cfg = c.cfg; S.awards = (c.awards || []).map(slimNote); S.members = c.members || []; S.cfgLoaded = true; }
   else { S.cfg = null; S.awards = []; S.members = []; S.cfgLoaded = false; }
 }
+// A note's recorded voice is kept in memory (VOICES) and loaded on demand; the history only marks that it has one.
+const VOICE_LATER = "voice", VOICES = {};
+function slimNote(a) {
+  if (a && a.kind === "note" && a.item && /^data:audio\//.test(a.item)) { VOICES[a.id] = a.item; a = Object.assign({}, a, { item: VOICE_LATER }); }
+  return a;
+}
+async function loadVoices(notes) {
+  const ids = notes.filter((n) => n.item === VOICE_LATER && !VOICES[n.id]).map((n) => n.id);
+  if (!ids.length || !sb || S.mode !== "cloud") return;
+  try {
+    const r = await sb.from("awards").select("id, item").eq("family_id", S.family.id).in("id", ids);
+    if (!r.error) r.data.forEach((x) => { if (x.item) VOICES[x.id] = x.item; });
+  } catch (e) {}
+}
+const voiceOfNote = (n) => VOICES[n.id] || (n.item && /^data:audio\//.test(n.item) ? n.item : null);
 let cacheTimer = null;
 function saveCache() {
   if (S.mode !== "cloud" || !S.family) return;
@@ -136,14 +151,29 @@ async function refreshAll() {
       sb.from("members").select("user_id, role, display_name").eq("family_id", fid)
     ]);
     if (c.error) throw c.error;
-    const all = []; let from = 0;
-    for (;;) {
-      const r = await sb.from("awards").select("id, kid, kind, label, icon, bid, item, mid, pts, at, by").eq("family_id", fid).order("at", { ascending: true }).range(from, from + 999);
-      if (r.error) throw r.error;
-      all.push(...r.data); if (r.data.length < 1000) break; from += 1000;
-    }
+    // Voice recordings on mailbox notes are big, so the history comes without them; they load when a child's page opens.
+    const page = async (cols, kinds) => {
+      const out = []; let from = 0;
+      for (;;) {
+        let q = sb.from("awards").select(cols).eq("family_id", fid);
+        q = kinds === "note" ? q.eq("kind", "note") : q.neq("kind", "note");
+        const r = await q.order("at", { ascending: true }).range(from, from + 999);
+        if (r.error) throw r.error;
+        out.push(...r.data); if (r.data.length < 1000) break; from += 1000;
+      }
+      return out;
+    };
+    const [main, notes, voiced] = await Promise.all([
+      page("id, kid, kind, label, icon, bid, item, mid, pts, at, by"),
+      page("id, kid, kind, label, icon, bid, mid, pts, at, by", "note"),
+      sb.from("awards").select("id").eq("family_id", fid).eq("kind", "note").not("item", "is", null)
+    ]);
+    if (voiced.error) throw voiced.error;
+    const hasVoice = new Set(voiced.data.map((r) => r.id));
+    notes.forEach((n) => { n.item = hasVoice.has(n.id) ? VOICE_LATER : null; });
+    const all = main.concat(notes).sort((a, b) => a.at - b.at);
     // Keep anything still waiting to be sent.
-    const pending = S.outbox.filter((o) => o.op === "insertAward").map((o) => o.rec);
+    const pending = S.outbox.filter((o) => o.op === "insertAward").map((o) => slimNote(o.rec));
     const ids = new Set(all.map((a) => a.id));
     const deleting = new Set(S.outbox.filter((o) => o.op === "deleteAward").map((o) => o.id));
     S.awards = all.concat(pending.filter((p) => !ids.has(p.id))).filter((a) => !deleting.has(a.id)).sort((a, b) => a.at - b.at);
@@ -162,7 +192,7 @@ function subscribe() {
   const fid = S.family.id;
   S.channel = sb.channel("family-" + fid)
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "awards", filter: "family_id=eq." + fid }, (p) => {
-      const a = p.new; if (S.awards.some((x) => x.id === a.id)) return;
+      const a = slimNote(p.new); if (S.awards.some((x) => x.id === a.id)) return;
       S.awards = S.awards.concat([a]).sort((x, y) => x.at - y.at); saveCache(); render();
     })
     .on("postgres_changes", { event: "DELETE", schema: "public", table: "awards" }, (p) => {
@@ -235,8 +265,8 @@ async function saveCfg(cfg) {
 }
 function addRecord(rec) {
   rec = Object.assign({ id: uid(), by: S.user ? S.user.id : null }, rec);
-  S.awards = S.awards.concat([rec]);
-  if (S.mode === "local") { if (HOST) HOST.add(rec); else lset("hd.local.awards", S.awards); } else { queue({ op: "insertAward", rec }); saveCache(); }
+  if (S.mode === "local") { S.awards = S.awards.concat([rec]); if (HOST) HOST.add(rec); else lset("hd.local.awards", S.awards); }
+  else { S.awards = S.awards.concat([slimNote(Object.assign({}, rec))]); queue({ op: "insertAward", rec }); saveCache(); }
   render();
   return rec.id;
 }
@@ -270,7 +300,7 @@ function startHost() {
   HOST.start({
     cfg: (cfg) => { S.cfg = cfg; S.cfgLoaded = true; render(); },
     awards: (list) => { S.awards = list.slice().sort((a, b) => a.at - b.at); render(); },
-    fail: () => { HOST = null; toast("Couldn't reach the shared save, so points are saved on this device."); startLocal(); }
+    fail: () => { HOST = null; toast("Couldn't reach the shared save, so Dojos are saved on this device."); startLocal(); }
   });
 }
 
@@ -610,7 +640,7 @@ function maybeRewardShow(kid) {
 }
 function celebrateLevel(kid, lvl) {
   SND.goal(); bigBurst(innerWidth / 2, innerHeight / 3, ["#FFD43B", "#FF5E8A", kid.look.color, "#fff"]);
-  const what = { 2: "spots", 3: "sparkly stars", 4: "wings", 5: "a magic glow", 6: "a magic glow" }[lvl] || "";
+  const what = { 2: "spots", 3: "sparkly stars", 4: "wings", 5: "a magic glow", 6: "even more magic", 7: "a third star", 8: "a golden sparkle ring", 9: "a super-bright glow", 10: "a rainbow ring", 11: "into a legend" }[lvl] || "even more magic";
   modal(`<div class="m">${monsterSvg(kid.look, wornBy(kid), lvl)}</div><h2>Level ${lvl}!</h2><p class="meta">${esc(kid.name)}'s monster grew ${what}.</p><button class="btn primary" data-autofocus id="ok">Brilliant!</button>`, () => { $("#ok").onclick = closeModal; });
 }
 function buyItem(kid, item) {
@@ -631,6 +661,10 @@ function buyItem(kid, item) {
     };
   });
 }
+// The parts of a child that anyone can change at any time (the same list set_monster allows in schema.sql).
+// Saving Settings or Set up keeps the latest of these, so a child playing on another device doesn't lose anything.
+const LIVE_FIELDS = ["look", "equip", "monsterName", "shelf", "eggs", "plays", "best", "island", "yard"];
+function keepLive(k) { const live = kidById(k.id); if (live) LIVE_FIELDS.forEach((f) => { if (live[f] !== undefined) k[f] = clone(live[f]); }); }
 // Anyone in the family (carers too) can change a monster's look, outfit, name and trophy shelf.
 function setMonster(kid, patch) {
   const cfg = clone(S.cfg), k = cfg.kids.find((x) => x.id === kid.id);
@@ -677,7 +711,7 @@ function buyTreat(kid, t) {
   const st = stats(kid.id);
   if (st.balance < t.cost) return;
   if (!isAdmin()) return toast("Ask a parent to spend Dojo $ on treats.");
-  requirePin(() => modal(`<div style="font-size:56px">${esc(t.icon || "🎁")}</div><h2>${esc(t.label)}</h2><p class="meta">Spend <b>${coin(t.cost)} Dojo $</b> of ${esc(kid.name)}'s ${st.balance}?</p><div class="row" style="justify-content:center"><button class="btn ghost" id="no">Not now</button><button class="btn kid" style="--kid:${esc(kid.look.color)}" id="yes" data-autofocus>Spend points</button></div>`, () => {
+  requirePin(() => modal(`<div style="font-size:56px">${esc(t.icon || "🎁")}</div><h2>${esc(t.label)}</h2><p class="meta">Spend <b>${coin(t.cost)} Dojo $</b> of ${esc(kid.name)}'s ${st.balance}?</p><div class="row" style="justify-content:center"><button class="btn ghost" id="no">Not now</button><button class="btn kid" style="--kid:${esc(kid.look.color)}" id="yes" data-autofocus>Spend Dojo $</button></div>`, () => {
     $("#no").onclick = closeModal;
     $("#yes").onclick = () => {
       closeModal();
@@ -687,7 +721,7 @@ function buyTreat(kid, t) {
   }));
 }
 function markGiven(kid, m) {
-  if (!isAdmin()) return toast("A parent can mark this as given.");
+  if (!isAdmin()) return toast("A parent taps ✓ Redeemed once it's done.");
   requirePin(() => { const id = addRecord({ kid: kid.id, kind: "given", mid: m.id, label: m.label, icon: m.icon || "🎁", pts: 0, at: Date.now() }); SND.earn(); toast(`Redeemed: ${m.label} ✓`, () => removeRecord(id)); });
 }
 // Big rewards a child has won: ready ones wait for a grown-up to tick them off; redeemed ones stay as achievements.
@@ -704,7 +738,7 @@ function rewardsCard(kid, parent, readyOnly) {
 
 /* ---------- backup + restore ---------- */
 function backupData() {
-  return { app: "home-dojo", version: 1, exportedAt: new Date().toISOString(), family: { name: S.family ? S.family.name : "Our family" }, config: S.cfg, awards: S.awards.map(({ id, kid, kind, label, icon, bid, item, mid, pts, at, by }) => ({ id, kid, kind, label, icon, bid, item, mid, pts, at, by })) };
+  return { app: "home-dojo", version: 1, exportedAt: new Date().toISOString(), family: { name: S.family ? S.family.name : "Our family" }, config: S.cfg, awards: S.awards.map(({ id, kid, kind, label, icon, bid, item, mid, pts, at, by }) => ({ id, kid, kind, label, icon, bid, item: item === VOICE_LATER ? VOICES[id] || null : item, mid, pts, at, by })) };
 }
 async function downloadBackup() {
   const data = JSON.stringify(backupData(), null, 2);
@@ -790,7 +824,7 @@ function welcomeJoined() {
   });
 }
 async function removeMember(m) {
-  confirmBox(`Remove ${m.display_name || "this person"}?`, "They'll lose access straight away. Their points stay in the history.", "Remove", async () => {
+  confirmBox(`Remove ${m.display_name || "this person"}?`, "They'll lose access straight away. Their Dojos stay in the history.", "Remove", async () => {
     const r = await sb.from("members").delete().eq("family_id", S.family.id).eq("user_id", m.user_id);
     if (r.error) return toast("Couldn't remove them: " + r.error.message);
     refreshAll(); toast("Removed");
@@ -1531,9 +1565,9 @@ function viewGuide() {
 // and each child's best score is kept. Games never give Dojos; a parent sets the daily limit in Settings.
 const GAMES = [
   { id: "bubbles", level: 2, icon: "🫧", name: "Bubble pop", blurb: "Pop only the colour your monster asks for. Quick streaks score double.", time: 40 },
-  { id: "feed", level: 2, icon: "🍎", name: "Feed the monster", blurb: "Your monster asks for a snack. Find it fast for more points.", time: 45 },
+  { id: "feed", level: 2, icon: "🍎", name: "Feed the monster", blurb: "Your monster asks for a snack. Find it fast for a higher score.", time: 45 },
   { id: "memory", say: "Flip two cards and find the matching pairs!", level: 3, icon: "🃏", name: "Memory match", blurb: "Find pairs before time runs out. Pairs in a row score extra.", time: 75 },
-  { id: "puzzle", say: "Slide the pieces to fix the picture!", level: 3, icon: "🧩", name: "Monster puzzle", blurb: "Slide the pieces to fix your monster. Fewer moves, more points.", time: 150 },
+  { id: "puzzle", say: "Slide the pieces to fix the picture!", level: 3, icon: "🧩", name: "Monster puzzle", blurb: "Slide the pieces to fix your monster. Fewer moves, higher score.", time: 150 },
   { id: "peek", say: "Tap the monsters when they pop up! Let the sleepy ones sleep!", level: 1, icon: "🕳️", name: "Peekaboo pals", blurb: "Tap the monsters as they pop up. Don't wake the sleepy ones!", time: 40 },
   { id: "race", say: "Ready, set, go! Tap left or right to change lanes!", level: 2, icon: "🏎️", name: "Monster racing", blurb: "Zoom past the other racers, grab coins and boosts. Can you finish first?", time: 50 },
   { id: "stars", say: "Catch the stars and dodge the rocks!", level: 4, icon: "🌟", name: "Catch the stars", blurb: "Catch the stars, dodge the rocks. It gets faster!", time: 45 },
@@ -1656,8 +1690,8 @@ function finishGame(kid, gm, score, msg, stage) {
   speak(head, kid, true);
   SND.goal(); if (record) { bigBurst(innerWidth / 2, innerHeight / 3, [kid.look.color, "#FFD43B", "#FF5E8A", "#3D7BFF"]); setTimeout(() => bigBurst(innerWidth / 2, innerHeight / 2, ["#FFD43B", "#FFF59D", "#FFFFFF"]), 500); }
   stage.innerHTML = `<div class="gend"><div class="m">${monsterSvg(kid.look, wornBy(kid), stats(kid.id).level)}</div><h2>${esc(head)}</h2>
-    <div class="gfinal">${score}<small>points</small></div>${msg ? `<p class="meta">${esc(msg)}</p>` : ""}
-    <p class="meta">${Math.max(old, score) ? `🏆 Best: ${Math.max(old, score)}` : "Score points to set a high score!"}${left === Infinity ? "" : ` · ${left ? `${left} game${left === 1 ? "" : "s"} left today` : "No more games today"}`}</p>
+    <div class="gfinal">${score}<small>score</small></div>${msg ? `<p class="meta">${esc(msg)}</p>` : ""}
+    <p class="meta">${Math.max(old, score) ? `🏆 Best: ${Math.max(old, score)}` : "Play well to set a high score!"}${left === Infinity ? "" : ` · ${left ? `${left} game${left === 1 ? "" : "s"} left today` : "No more games today"}`}</p>
     <div class="row" style="justify-content:center"><button class="btn ghost" id="gDone">Done</button>${left ? `<button class="btn kid" id="gAgain">Play again</button>` : ""}</div></div>`;
   stage.querySelector("#gDone").onclick = closeGame;
   const again = stage.querySelector("#gAgain"); if (again) again.onclick = () => startGame(kid, gm.id);
@@ -1997,7 +2031,7 @@ function trophiesFor(kid) {
   }
   const list = [];
   ms.forEach((m, i) => list.push({ id: "g:" + m.id, group: "goal", tier: TIERS[Math.min(i, 3)], name: m.label, icon: m.icon || "🎁", need: `${m.at} Dojos earned`, at: won["g:" + m.id], m, given: given[m.id] }));
-  LEVELS.forEach((lv, i) => { if (i) list.push({ id: "l:" + (i + 1), group: "level", tier: TIERS[Math.min(i - 1, 3)], name: `Level ${i + 1} monster`, n: i + 1, need: `${lv} points earned`, at: won["l:" + (i + 1)] }); });
+  LEVELS.forEach((lv, i) => { if (i) list.push({ id: "l:" + (i + 1), group: "level", tier: TIERS[Math.min(i - 1, 3)], name: `Level ${i + 1} monster`, n: i + 1, need: `${lv} Dojos earned`, at: won["l:" + (i + 1)] }); });
   behs.forEach((b) => {
     const c = counts[b.id] || 0;
     SKILL_STEPS.forEach(([n, tier], si) => {
@@ -2023,10 +2057,10 @@ function openTrophy(kid, t) {
   const when = t.at ? new Date(t.at).toLocaleDateString([], { day: "numeric", month: "long", year: "numeric" }) : "";
   modal(`<div style="width:150px;height:150px;margin:0 auto">${trophyArt(t, locked)}</div><h2>${esc(locked ? "Still to win" : t.name)}</h2>
     <p class="meta" style="margin:0">${locked ? `${t.group === "goal" ? esc(t.icon + " " + t.name) + ". " : ""}Win it with ${esc(t.need)}.` : `Won on ${esc(when)}.`}</p>
-    ${!locked && t.group === "goal" ? `<p class="meta" style="margin:0">${t.given ? "Reward given ✓" : "Reward not given yet."}</p>` : ""}
+    ${!locked && t.group === "goal" ? `<p class="meta" style="margin:0">${t.given ? "Redeemed ✓" : "Not redeemed yet."}</p>` : ""}
     <div class="row" style="justify-content:center">
       ${!locked ? `<button class="btn ${onShelf ? "ghost" : "kid"}" style="--kid:${esc(kid.look.color)}" id="shelfBtn">${onShelf ? "Take off my shelf" : "Put on my shelf"}</button>` : ""}
-      ${!locked && t.group === "goal" && !t.given && isAdmin() ? `<button class="btn" id="givenBtn">Mark given</button>` : ""}
+      ${!locked && t.group === "goal" && !t.given && isAdmin() ? `<button class="btn" id="givenBtn">✓ Redeemed</button>` : ""}
       <button class="btn ghost" id="ok">Close</button></div>`, () => {
     $("#ok").onclick = closeModal;
     const sb2 = $("#shelfBtn");
@@ -2054,7 +2088,7 @@ function fmtWhen(ts) {
 
 function viewNoSetup() {
   return `<div class="auth"><div class="m">${monsterSvg({ shape: "round", color: COLORS[0], eyes: 2, top: "horns" }, {}, 1)}</div>
-    <h1>Almost ready</h1><p class="lead">This copy of Home Dojo isn't connected to a database yet, so it can't share points between phones.</p>
+    <h1>Almost ready</h1><p class="lead">This copy of Home Dojo isn't connected to a database yet, so it can't share Dojos between phones.</p>
     <div class="note">If you're setting it up, follow the steps in the README: add your Supabase Project URL and anon key to <b>config.js</b>.</div>
     <button class="btn primary" id="tryLocal">Try it on this device only</button></div>`;
 }
@@ -2064,7 +2098,7 @@ function viewSignIn() {
     <h1>${inviteFromLink ? `${INVITE.from ? esc(INVITE.from) + " invited you!" : "You're invited!"}` : "Home Dojo"}</h1>
     ${inviteFromLink ? `<div class="card invitebox"><p style="margin:0">Join ${INVITE.fam ? `<b>${esc(INVITE.fam)}</b>` : "the family"} on Home Dojo Monsters, where the kids earn Dojos for great behaviour and grow their monsters.</p>
       <ol><li><b>Create account</b> below with your name, email and a password.</li><li>If an email arrives, tap the link in it to confirm.</li><li>You'll join the family automatically. That's it!</li></ol>
-      <p class="meta" style="margin:0">Already have an account? Tap Sign in instead.</p></div>` : `<p class="lead">Points for good behaviour, with monsters that grow.</p>`}
+      <p class="meta" style="margin:0">Already have an account? Tap Sign in instead.</p></div>` : `<p class="lead">Dojos for good behaviour, with monsters that grow.</p>`}
     <div class="seg2"><button data-auth="signin" aria-pressed="${t === "signin"}">Sign in</button><button data-auth="signup" aria-pressed="${t === "signup"}">Create account</button></div>
     <form id="authForm" class="card" novalidate>
       ${t === "signup" ? `<label class="field">Your name (as the kids call you)<input id="aName" autocomplete="nickname" placeholder="e.g. Mum, Dad, Nana" required></label>` : ""}
@@ -2103,16 +2137,24 @@ function viewHome() {
   return `${viewLobby()}${viewTeam()}${toRedeem.length ? `<div class="redeemhome">${toRedeem.map((k) => rewardsCard(k, true, true)).join("")}</div>` : ""}<div class="kids">${kids.map((k) => {
     const st = stats(k.id), ms = milestonesOf(k).find((m) => st.earned < m.at);
     const pct = ms ? Math.round(100 * st.earned / ms.at) : 100;
-    return `<button class="kidcard" data-kid="${esc(k.id)}" style="--kid:${esc(k.look.color)}" aria-label="Open ${esc(k.name)}">
+    // Kids' play shows each monster without totals, so the boys aren't comparing numbers side by side.
+    if (kidsMode()) return `<button class="kidcard" data-kid="${esc(k.id)}" style="--kid:${esc(k.look.color)}" aria-label="Open ${esc(k.name)}">
+      <div class="m">${monsterSvg(k.look, dressedFor(k), st.level)}</div>
+      <div class="stack"><h2>${esc(k.name)}</h2><div class="meta">Tap to play!</div></div>
+    </button>`;
+    // Grown-ups get the child's behaviour buttons right under the card: one tap gives a Dojo.
+    const quick = (k.behaviours || []).concat([BONUS]);
+    return `<div class="kidwrap" style="--kid:${esc(k.look.color)}"><button class="kidcard" data-kid="${esc(k.id)}" aria-label="Open ${esc(k.name)}">
       <div class="m">${monsterSvg(k.look, dressedFor(k), st.level)}</div>
       <div class="stack"><h2>${esc(k.name)} ${streakChip(k.id)}${rewardsOf(k).some((x) => !x.given) ? ` <span class="pill rwdpill">🎁 Reward ready</span>` : ""}</h2>${wallet(st, true)}
       ${ms ? `<div class="bar" aria-hidden="true"><i style="width:${pct}%"></i></div><div class="meta">${ms.at - st.earned} to ${esc(ms.icon || "🎁")} ${esc(ms.label)}</div>` : `<div class="meta">Level ${st.level} monster</div>`}</div>
-    </button>`;
+    </button>
+    <div class="quickgive" role="group" aria-label="Give ${esc(k.name)} a Dojo">${quick.map((b) => `<button class="qbeh${b.id === "bonus" ? " bonus" : ""}" data-qbeh="${esc(k.id)}|${esc(b.id)}" aria-label="Give ${esc(k.name)} a Dojo for ${esc(b.label)}"><span aria-hidden="true">${esc(b.icon)}</span><small>${esc(b.label)}</small></button>`).join("")}</div></div>`;
   }).join("")}</div>
   <div class="list" style="margin-top:18px">
   ${kidsMode() ? "" : `<div class="row"><button class="btn ghost" id="quickBtn">⚡ Quick start</button><button class="btn ghost" id="guideBtn">📖 Carers' guide: how and when to give Dojos</button><button class="btn ghost" id="fbBtn">💬 Feedback</button></div>`}
   ${nudge ? `<div class="note row" style="justify-content:space-between"><span>It's been a while since your last backup.</span><button class="btn small primary" id="nudgeBackup">Back up now</button></div>` : ""}
-  ${S.mode === "local" && !HOST ? `<p class="note">Try-it-out mode: points are saved on this device only.</p>` : ""}
+  ${S.mode === "local" && !HOST ? `<p class="note">Try-it-out mode: everything is saved on this device only.</p>` : ""}
   ${installHelp()}</div>`;
 }
 
@@ -2130,7 +2172,7 @@ function viewKid(kid, tab) {
       const n = S.awards.filter((a) => a.kid === kid.id && a.kind === "earn" && a.bid === b.id && a.at >= today).length;
       return `<button class="beh${b.id === "bonus" ? " bonus" : ""}" data-beh="${esc(b.id)}"><span class="e" aria-hidden="true">${esc(b.icon)}</span><span class="l">${esc(b.label)}</span><span class="c">${n ? `${n} today` : "+1"}</span></button>`;
     }).join("")}</div>
-    <p class="note" style="margin-top:16px">Tap straight away, and say what you saw: "You took big breaths when you were cross. That's a Calm body point!"</p>`;
+    <p class="note" style="margin-top:16px">Tap straight away, and say what you saw: "You took big breaths when you were cross. That's a Calm body Dojo!"</p>`;
   } else if (tab === "shop") {
     const owned = st.owned, eq = wornBy(kid);
     const tierChip = (cost) => { const [, k, label] = priceTier(cost); return `<span class="ptier ${k}">${label}</span>`; };
@@ -2164,11 +2206,11 @@ function viewKid(kid, tab) {
   } else if (tab === "trophies") {
     const ms = milestonesOf(kid), nx = ms.find((m) => st.earned < m.at);
     const all = trophiesFor(kid), shelf = (kid.shelf || []).map((id) => all.find((t) => t.id === id)).filter((t) => t && t.at);
-    const tile = (t) => `<button class="trophy${t.at ? "" : " locked"}" data-trophy="${esc(t.id)}"><div class="art">${trophyArt(t, !t.at)}</div><div class="n">${esc(t.at || t.group !== "goal" ? t.name : t.name)}</div><div class="d">${t.at ? (t.group === "goal" ? (t.given ? "Given ✓" : "Ready!") : new Date(t.at).toLocaleDateString([], { day: "numeric", month: "short" })) : esc(t.group === "goal" ? (t.m.at - st.earned) + " to go" : "Keep going")}</div></button>`;
+    const tile = (t) => `<button class="trophy${t.at ? "" : " locked"}" data-trophy="${esc(t.id)}"><div class="art">${trophyArt(t, !t.at)}</div><div class="n">${esc(t.at || t.group !== "goal" ? t.name : t.name)}</div><div class="d">${t.at ? (t.group === "goal" ? (t.given ? "Redeemed ✓" : "Ready!") : new Date(t.at).toLocaleDateString([], { day: "numeric", month: "short" })) : esc(t.group === "goal" ? (t.m.at - st.earned) + " to go" : "Keep going")}</div></button>`;
     const group = (g, title, note) => { const items = all.filter((t) => t.group === g); return items.length ? `<div class="sect"><h3>${secTitle(title)}</h3>${note ? `<p>${note}</p>` : ""}</div><div class="case">${items.map(tile).join("")}</div>` : ""; };
     const treats = S.awards.filter((a) => a.kid === kid.id && a.kind === "spend" && a.bid !== "admin").slice().reverse();
     body = rewardsCard(kid, isAdmin() && !kidsMode()) + (nx ? `<div class="goal"><div class="meta">Next big reward</div><div class="big">${esc(nx.icon || "🎁")} ${esc(nx.label)}</div><div class="bar"><i style="width:${Math.round(100 * st.earned / nx.at)}%"></i></div><div class="meta"><b class="price" style="color:var(--ink)">${st.earned}</b> of ${nx.at} Dojos earned. ${nx.at - st.earned} to go!</div><div class="meta">Spending Dojo $ in the shop never moves you backwards here.</div></div>`
-      : ms.length ? `<div class="goal"><div class="big">All reward goals won! 🎉</div><div class="meta">A parent can add new goals in settings.</div></div>` : "") +
+      : ms.length ? `<div class="goal"><div class="big">All big rewards won! 🎉</div><div class="meta">A parent can add new big rewards in settings.</div></div>` : "") +
       `<div class="sect"><h3>⭐ My shelf</h3><p>Tap a trophy to show it off here and in the house</p></div>
       <div class="shelfbig">${shelf.length ? shelf.map(tile).join("") : `<p class="meta" style="margin:0">Nothing on the shelf yet. Tap any trophy you've won and choose "Put on my shelf".</p>`}</div>` +
       group("goal", "Reward trophies", "Won by earning Dojos") +
@@ -2223,12 +2265,13 @@ function viewKid(kid, tab) {
     const recent = S.awards.filter((a) => a.kid === kid.id && a.kind !== "note").slice(-30).reverse();
     body = `<div class="wk"><div class="row" style="justify-content:space-between"><h3>This week</h3><span class="bal" style="font-size:26px">${wk.length}<span>Dojos</span></span></div>
       <div class="days">${days.map((d) => `<div class="d${d.today ? " today" : ""}">${d.d.toLocaleDateString([], { weekday: "short" })}<b>${d.n}</b></div>`).join("")}</div>
-      ${rows.length ? rows.map(([l, n]) => `<div class="wkrow"><span>${esc(l)}</span><div class="bar"><i style="width:${Math.round(100 * n / max)}%"></i></div><b>${n}</b></div>`).join("") : `<div class="meta">No points yet this week.</div>`}
+      ${rows.length ? rows.map(([l, n]) => `<div class="wkrow"><span>${esc(l)}</span><div class="bar"><i style="width:${Math.round(100 * n / max)}%"></i></div><b>${n}</b></div>`).join("") : `<div class="meta">No Dojos yet this week.</div>`}
       ${rows.length ? `<div class="note">Praise the pattern: "You were ${esc(rows[0][0].toLowerCase())} ${rows[0][1]} ${rows[0][1] === 1 ? "time" : "times"} this week!"</div>` : ""}</div>
+      ${kidsMode() ? "" : trendHtml(kid)}
       <div class="sect"><h3>🕘 Recent</h3></div>
       ${recent.length ? `<div class="log">${recent.map((a) => {
         const who = a.by && S.mode === "cloud" ? memberName(a.by) : "";
-        return `<div class="logrow"><span aria-hidden="true">${esc(a.icon || "•")}</span><div class="t">${esc(a.kind === "buy" ? "Bought " + a.label : a.kind === "spend" && a.bid !== "admin" ? "Treat: " + a.label : a.kind === "given" ? "Reward given: " + a.label : a.label)}<div class="when">${fmtWhen(a.at)}${who ? ` <span class="by">· ${esc(who)}</span>` : ""}</div></div>${(() => { const d = a.kind === "given" ? 0 : a.kind === "earn" ? a.pts : -a.pts; return `<span class="p${d < 0 ? " neg" : ""}">${d ? (d > 0 ? "+" : "−") + Math.abs(d) + (a.kind === "spend" && a.bid === "admin" ? " $" : "") : ""}</span>`; })()}${canDelete(a) ? `<button class="x" data-del="${esc(a.id)}" aria-label="Remove this entry">✕</button>` : ""}</div>`;
+        return `<div class="logrow"><span aria-hidden="true">${esc(a.icon || "•")}</span><div class="t">${esc(a.kind === "buy" ? "Bought " + a.label : a.kind === "spend" && a.bid !== "admin" ? "Treat: " + a.label : a.kind === "given" ? "Reward redeemed: " + a.label : a.label)}<div class="when">${fmtWhen(a.at)}${who ? ` <span class="by">· ${esc(who)}</span>` : ""}</div></div>${(() => { const d = a.kind === "given" ? 0 : a.kind === "earn" ? a.pts : -a.pts; return `<span class="p${d < 0 ? " neg" : ""}">${d ? (d > 0 ? "+" : "−") + Math.abs(d) + (a.kind === "spend" && a.bid === "admin" ? " $" : "") : ""}</span>`; })()}${canDelete(a) ? `<button class="x" data-del="${esc(a.id)}" aria-label="Remove this entry">✕</button>` : ""}</div>`;
       }).join("")}</div>` : `<div class="empty">Nothing here yet.</div>`}`;
   }
   return `<div style="--kid:${esc(kid.look.color)}">
@@ -2241,6 +2284,31 @@ function viewKid(kid, tab) {
       ${st.next != null ? `<div class="bar" aria-hidden="true"><i style="width:${pct}%"></i></div><div class="meta">${toNext} more ${toNext === 1 ? "Dojo" : "Dojos"} to level ${st.level + 1}</div>` : `<div class="meta">Top level reached!</div>`}</div></section>
     <nav class="tabs" role="tablist">${[].concat(kidsMode() ? [] : [["earn", "Earn", "⭐"]]).concat([["shop", "Shop", "🛍️"], ["monster", "Monster", "👾"], ["trophies", "Trophies", "🏆"]]).concat(gameCfg().on || adminPlay() ? [["games", "Play", "🎮"]] : []).concat([["week", "Week", "📅"]]).concat(adminPlay() ? [["admin", "Admin", "🛠"]] : []).map(([id, l, ic]) => `<button role="tab" data-tab="${id}" aria-selected="${tab === id}"><span class="ti" aria-hidden="true">${ic}</span>${l}</button>`).join("")}</nav>
     ${body}</div>`;
+}
+
+// How it's going: each behaviour's Dojos week by week over the last 8 weeks, oldest on the left,
+// with the last 4 weeks compared to the 4 before. Admin changes don't count.
+function trendHtml(kid) {
+  const W = 8, now = weekStart(new Date()).getTime(), start = now - (W - 1) * 7 * 864e5;
+  const wkOf = (t) => Math.floor((t - start) / (7 * 864e5));
+  const rows = {};
+  for (const a of S.awards) {
+    if (a.kid !== kid.id || a.kind !== "earn" || a.bid === "admin" || a.at < start) continue;
+    const r = rows[a.label] || (rows[a.label] = { icon: a.icon, w: new Array(W).fill(0) });
+    const i = wkOf(a.at); if (i >= 0 && i < W) r.w[i] += a.pts || 1;
+  }
+  const list = Object.entries(rows).sort((a, b) => b[1].w.reduce((x, y) => x + y) - a[1].w.reduce((x, y) => x + y));
+  if (!list.length) return "";
+  const max = Math.max(1, ...list.flatMap(([, r]) => r.w));
+  const sum = (w, a, b) => w.slice(a, b).reduce((x, y) => x + y, 0);
+  return `<div class="sect"><h3>📈 How it's going</h3><p>Dojos for each behaviour over the last 8 weeks, oldest on the left</p></div>
+    <div class="trend">${list.map(([label, r]) => {
+      const before = sum(r.w, 0, 4), recent = sum(r.w, 4, 8), dir = recent > before ? "up" : recent < before ? "down" : "same";
+      return `<div class="trow"><span class="tl"><span aria-hidden="true">${esc(r.icon || "⭐")}</span> ${esc(label)}</span>
+        <span class="spark" aria-hidden="true">${r.w.map((n) => `<i style="height:${Math.max(6, Math.round(100 * n / max))}%"${n ? "" : ' class="z"'}></i>`).join("")}</span>
+        <span class="tdir ${dir}" title="Last 4 weeks: ${recent}. The 4 before: ${before}.">${dir === "up" ? "▲" : dir === "down" ? "▼" : "●"} ${recent}</span></div>`;
+    }).join("")}</div>
+    <p class="meta">▲ means more in the last 4 weeks than the 4 before.</p>`;
 }
 
 function starterKid(name, age, i) {
@@ -2266,7 +2334,7 @@ function famCard() {
       <label class="field">Your name (as the kids call you)<input id="myName" value="${esc(me ? me.display_name : "")}"></label>
       <div><div class="meta" style="font-weight:700">Who's in the family</div>${S.members.map((m) => `<div class="member"><div class="t"><b>${esc(m.display_name || "Someone")}${S.user && m.user_id === S.user.id ? " (you)" : ""}</b></div><span class="pill role">${m.role === "admin" ? "Parent" : "Carer"}</span>${admin && S.user && m.user_id !== S.user.id ? `<button class="x" data-rmmember="${esc(m.user_id)}" aria-label="Remove ${esc(m.display_name)}">✕</button>` : ""}</div>`).join("")}</div>
       ${admin ? `<div class="row"><button class="btn small primary" data-invite="carer">+ Invite a carer</button><button class="btn small" data-invite="admin">+ Invite a parent</button></div>
-      <p class="meta" style="margin:0">Carers can give points and dress the monsters. Parents can also spend treats, mark goals as given, change settings and invite people.</p>` : `<p class="meta" style="margin:0">You're a carer: you can give points and help dress the monsters. Ask a parent to spend treats or change settings.</p>`}
+      <p class="meta" style="margin:0">Carers can give Dojos and dress the monsters. Parents can also spend treats, mark big rewards as redeemed, change settings and invite people.</p>` : `<p class="meta" style="margin:0">You're a carer: you can give Dojos and help dress the monsters. Ask a parent to spend treats or change settings.</p>`}
     </section>`;
 }
 function backupCard() {
@@ -2288,7 +2356,7 @@ function viewFamilyPanel() { return famCard() + backupCard() + deviceCard(); }
 // Settings opens on a page of big tiles; each tile is a short page of its own. Edits stay in the draft across pages until Save.
 const SET_PAGES = [
   ["kids", "👧", "Children & behaviours", "Names, ages, birthdays and the behaviours that earn Dojos.", "Children"],
-  ["rewards", "🎁", "Treats & reward goals", "What Dojo $ can buy, the big goals and the family team jar.", "Rewards"],
+  ["rewards", "🎁", "Treats & big rewards", "What Dojo $ can buy, the big rewards and the family team jar.", "Rewards"],
   ["games", "🎮", "Games & admin mode", "Turn games on or off, set a daily limit, and edit anything in admin mode.", "Games"],
   ["family", "👪", "Family & invites", "Who's in the family. Invite a parent or a carer.", "Family"],
   ["device", "🔒", "PIN, backups & this device", "Parent PIN, backup files, sounds, sign out and what's new.", "This device"]
@@ -2341,9 +2409,9 @@ function viewSettings() {
   } else if (S.setPage === "rewards") {
     body = setKidPicker(d) + (k ? `<section class="card" style="--kid:${esc(k.look.color)}"><h3 style="font-size:21px">${esc(k.name || "Child")}</h3>
       <div><h3 style="font-size:19px">Treats in the shop</h3><p class="meta" style="margin:2px 0 8px">Small everyday rewards ${esc(k.name || "they")} can buy. Keep at least one cheap enough to earn in a day.</p>
-        <div class="list">${(k.rewards || []).map((t, ti) => `<div class="editrow"><input class="inp" style="text-align:center" aria-label="Icon" data-k="${ki}" data-arr="rewards" data-i="${ti}" data-f="icon" value="${esc(t.icon)}"><input class="inp" aria-label="Treat" data-k="${ki}" data-arr="rewards" data-i="${ti}" data-f="label" value="${esc(t.label)}"><input class="inp" aria-label="Cost in points" type="number" min="1" data-k="${ki}" data-arr="rewards" data-i="${ti}" data-f="cost" value="${esc(t.cost)}"><button class="x" data-rm="${ki}" data-arr="rewards" data-i="${ti}" aria-label="Remove">✕</button></div>`).join("")}</div>
+        <div class="list">${(k.rewards || []).map((t, ti) => `<div class="editrow"><input class="inp" style="text-align:center" aria-label="Icon" data-k="${ki}" data-arr="rewards" data-i="${ti}" data-f="icon" value="${esc(t.icon)}"><input class="inp" aria-label="Treat" data-k="${ki}" data-arr="rewards" data-i="${ti}" data-f="label" value="${esc(t.label)}"><input class="inp" aria-label="Cost in Dojo $" type="number" min="1" data-k="${ki}" data-arr="rewards" data-i="${ti}" data-f="cost" value="${esc(t.cost)}"><button class="x" data-rm="${ki}" data-arr="rewards" data-i="${ti}" aria-label="Remove">✕</button></div>`).join("")}</div>
         <button class="btn small" style="margin-top:8px" data-add="${ki}" data-arr="rewards">+ Add treat</button></div>
-      <div><h3 style="font-size:19px">Reward goals</h3><p class="meta" style="margin:2px 0 8px">Bigger rewards unlocked by total Dojos earned. Spending Dojo $ in the shop doesn't count against them.</p>
+      <div><h3 style="font-size:19px">Big rewards</h3><p class="meta" style="margin:2px 0 8px">Bigger rewards unlocked by total Dojos earned. Spending Dojo $ in the shop doesn't count against them.</p>
         <div class="list">${(k.milestones || []).map((m, mi) => `<div class="editrow"><input class="inp" style="text-align:center" aria-label="Icon" data-k="${ki}" data-arr="milestones" data-i="${mi}" data-f="icon" value="${esc(m.icon)}"><input class="inp" aria-label="Reward" data-k="${ki}" data-arr="milestones" data-i="${mi}" data-f="label" value="${esc(m.label)}"><input class="inp" aria-label="Points needed" type="number" min="1" data-k="${ki}" data-arr="milestones" data-i="${mi}" data-f="at" value="${esc(m.at)}"><button class="x" data-rm="${ki}" data-arr="milestones" data-i="${mi}" aria-label="Remove">✕</button></div>`).join("")}</div>
         <button class="btn small" style="margin-top:8px" data-add="${ki}" data-arr="milestones">+ Add goal</button></div>
     </section>` : "") + `
@@ -2456,6 +2524,7 @@ function yardBar(kid) {
     <p class="meta lobby-hint">Tap your monster to play, or tap the grass to walk there. Tap the house to go inside.</p>`;
 }
 function mountYard(kid) {
+  loadVoices(notesOf(kid).slice(0, 15));
   document.querySelectorAll(".yardbar [data-yard]").forEach((b) => b.onclick = () => yardDo(kid, b.dataset.yard));
   const st = LOBBY.st["k:" + kid.id]; if (!st || !st.el) return;
   const bob = st.el.querySelector(".bob"), n = mudOf(kid);
@@ -2568,7 +2637,9 @@ let noteAudio = null;
 function playNote(n) {
   if (noteAudio) { try { noteAudio.pause(); } catch (e) {} noteAudio = null; }
   if (!soundOn()) return;
-  if (n.item && /^data:audio\//.test(n.item)) { noteAudio = new Audio(n.item); noteAudio.play().catch(() => speak(n.label)); }
+  const v = voiceOfNote(n);
+  if (v) { noteAudio = new Audio(v); noteAudio.play().catch(() => speak(n.label)); }
+  else if (n.item === VOICE_LATER) loadVoices([n]).then(() => { const w = voiceOfNote(n); if (w) { noteAudio = new Audio(w); noteAudio.play().catch(() => speak(n.label)); } else speak(n.label); });
   else speak(n.label);
 }
 const noteFrom = (n) => (n.by && S.mode === "cloud" ? memberName(n.by) : "") || "A grown-up";
@@ -2683,12 +2754,12 @@ function pickLock(k, done) {
 const QUICK = [
   ["👾", "Welcome to Home Dojo", "The kids earn Dojos for great behaviour and grow their own monster."],
   ["⭐", "Catch them being good", "Tap Parents, tap the child, then tap what they did. A cheer plays and they get +1."],
-  ["🗣️", "Say what you saw", "\"You took big breaths when you were cross. That's a Calm body point!\" Straight away is best."],
-  ["💰", "Two kinds of points", "Dojos count everything ever earned (levels, goals, trophies). Dojo $ is pocket money for the shop. Spending never takes Dojos away."],
-  ["🎁", "Treats and big goals", "Small treats cost Dojo $. Big reward goals unlock as Dojos add up. A parent hands them out."],
+  ["🗣️", "Say what you saw", "\"You took big breaths when you were cross. That's a Calm body Dojo!\" Straight away is best."],
+  ["💰", "Dojos and Dojo $", "Dojos count everything ever earned (levels, big rewards, trophies). Dojo $ is pocket money for the shop. Spending never takes Dojos away."],
+  ["🎁", "Treats and big rewards", "Small treats cost Dojo $. Big rewards unlock as Dojos add up. A parent hands them out."],
   ["✋", "Points only go up", "Never take one away. If it's a tricky moment, just don't give one, and catch the next good thing."],
-  ["🎮", "Kids' play", "Hand it over: they dress their monster, play games, water their garden and open their mail. No points can be given or taken."],
-  ["👪", "One family, every phone", "Parents and carers share one family and see points straight away. Invite people in Settings, under Family."]
+  ["🎮", "Kids' play", "Hand it over: they dress their monster, play games, water their garden and open their mail. No Dojos can be given or taken."],
+  ["👪", "One family, every phone", "Parents and carers share one family and see Dojos straight away. Invite people in Settings, under Family."]
 ];
 function showQuickStart() {
   let i = 0;
@@ -2733,7 +2804,7 @@ function viewMenu() {
   return `<div class="menu">
     <div class="menu-monsters" aria-hidden="true">${kids.map((k) => `<div class="m">${monsterSvg(k.look, dressedFor(k), stats(k.id).level)}</div>`).join("")}</div>
     <h1 class="menu-title">Hi! Who's using the app?</h1>
-    ${tile("goKids", "🎮", "Kids' play", "Play with your monster, island and games. Nothing can be given or changed.")}
+    ${tile("goKids", "🎮", "Kids' play", "Play with your monster, island and games. No Dojos can be given or taken.")}
     ${tile("goParents", "🧑‍🧑‍🧒", "Parents", "Give Dojos, spend treats, see the week and change settings.", true)}
     ${isAdminRole() ? tile("goSetup", "🧭", "Set up", "Answer a few questions to choose behaviours, big rewards and treats.", true) : ""}
     ${tile("goSettings", "⚙️", "Settings", isAdminRole() ? "Children, rewards, games, family invites and backups." : "Your name, this device and signing out.", isAdminRole())}
@@ -2797,7 +2868,7 @@ function wizSave() {
   const d = clone(S.wiz.d);
   if (d.pin && d.pin.length !== 4) return toast("The PIN needs exactly 4 numbers, or leave it blank.");
   d.kids.forEach((c) => { delete c._new; delete c._age; c.name = (c.name || "").trim() || "Child"; c.milestones = c.milestones.filter((m) => m.at > 0 && m.label); c.rewards = c.rewards.filter((t) => t.cost > 0 && t.label);
-    const live = kidById(c.id); if (live) ["look", "equip", "monsterName", "shelf", "eggs", "plays", "best", "island"].forEach((f) => { if (live[f] !== undefined) c[f] = live[f]; }); });
+    keepLive(c); });
   if (S.cfg) d.familyIsland = S.cfg.familyIsland;
   S.wiz = null; saveCfg(d); go({ name: "home" }); toast("All set! Your monsters are ready.");
   SND.earn(); confetti(innerWidth / 2, innerHeight * .3, ["#FFD43B", "#FF5E8A", "#3D7BFF", "#4CBF5A"], 60);
@@ -2970,6 +3041,10 @@ function wire() {
 
   // home
   v.querySelectorAll("[data-kid]").forEach((b) => b.onclick = () => go({ name: "kid", kid: b.dataset.kid, tab: "earn" }));
+  v.querySelectorAll("[data-qbeh]").forEach((b) => b.onclick = () => {
+    const [kid, id] = b.dataset.qbeh.split("|"), k = kidById(kid), beh = k && (id === "bonus" ? BONUS : (k.behaviours || []).find((x) => x.id === id));
+    if (beh) { award(k, beh, b); bounce($(`.kidwrap [data-kid="${CSS.escape(kid)}"] .m`), true); }
+  });
   v.querySelectorAll("[data-visit]").forEach((b) => b.onclick = () => go({ name: "kid", kid: b.dataset.visit, tab: "monster", sub: "house" }));
   if ($("#lobbyLayer")) mountLobby();
   on("#nudgeBackup", downloadBackup);
@@ -3006,7 +3081,7 @@ function wire() {
     v.querySelectorAll("[data-treat]").forEach((b) => b.onclick = () => buyTreat(kid, kid.rewards.find((t) => t.id === b.dataset.treat)));
     v.querySelectorAll("[data-given]").forEach((b) => b.onclick = () => markGiven(kid, kid.milestones.find((m) => m.id === b.dataset.given)));
     v.querySelectorAll("[data-del]").forEach((b) => b.onclick = () => {
-      const go2 = () => confirmBox("Remove this entry?", "Its points come off the total.", "Remove", () => removeRecord(b.dataset.del));
+      const go2 = () => confirmBox("Remove this entry?", "It comes off the total.", "Remove", () => removeRecord(b.dataset.del));
       isAdmin() ? requirePin(go2) : go2();
     });
     v.querySelectorAll("[data-sub]").forEach((b) => b.onclick = () => { S.route.sub = b.dataset.sub; rerender(); });
@@ -3098,8 +3173,8 @@ function wireSettings() {
   on("#setSave", () => {
     if (d.pin && d.pin.length !== 4) return toast("The PIN needs exactly 4 digits, or leave it blank.");
     d.kids.forEach((k) => { k.name = (k.name || "").trim() || "Child"; k.milestones = (k.milestones || []).filter((m) => m.at > 0); k.rewards = (k.rewards || []).filter((t) => t.cost > 0); });
-    // keep whatever the monsters are wearing now (a carer may have changed it meanwhile)
-    d.kids.forEach((k) => { const live = kidById(k.id); if (live) { k.equip = live.equip || {}; k.look = live.look || k.look; k.monsterName = live.monsterName || ""; k.shelf = live.shelf || []; k.eggs = live.eggs || 0; k.plays = live.plays; k.best = live.best; k.island = live.island; } });
+    // keep each monster as it is now (a child or carer may have changed it while Settings was open)
+    d.kids.forEach(keepLive);
     d.familyIsland = S.cfg.familyIsland;
     const cfg = clone(d); S.draft = null; S.setPage = null; S.route = { name: "home" };
     saveCfg(cfg); rerender(); window.scrollTo(0, 0); toast("Settings saved");
@@ -3122,7 +3197,7 @@ $("#menuBtn").onclick = () => { if (S.phase === "app") { S.wiz = null; S.draft =
 // Parents locks itself after 10 minutes without a tap, in case the tablet gets handed over.
 document.addEventListener("pointerdown", () => { S.touchAt = Date.now(); }, true);
 setInterval(() => { if (S.view === "parents" && Date.now() - (S.touchAt || 0) > 10 * 60 * 1000 && !S.draft && !S.wiz) { toMenu(); toast("Parents locked after 10 quiet minutes."); } }, 30000);
-function openSettings() { S.draft = S.cfg ? clone(S.cfg) : { version: 1, sound: true, pin: "", kids: [] }; S.draft.kids.forEach((k) => { k.rewards = k.rewards || []; k.milestones = k.milestones || []; k.behaviours = k.behaviours || []; k.look = k.look || {}; }); S.setPage = null; go({ name: "settings" }); }
+function openSettings() { loadVoices(S.awards.filter((a) => a.kind === "note")); /* so a backup includes the voice notes */ S.draft = S.cfg ? clone(S.cfg) : { version: 1, sound: true, pin: "", kids: [] }; S.draft.kids.forEach((k) => { k.rewards = k.rewards || []; k.milestones = k.milestones || []; k.behaviours = k.behaviours || []; k.look = k.look || {}; }); S.setPage = null; go({ name: "settings" }); }
 $("#setBtn").onclick = () => {
   if (S.phase !== "app" || S.view !== "parents") return;
   isAdmin() ? requirePin(openSettings) : openSettings();

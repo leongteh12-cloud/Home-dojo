@@ -32,11 +32,11 @@ Every behaviour you reward gives the child one Dojo and one Dojo $ at the same t
 | --- | --- | --- |
 | What it is | Everything ever earned | Spending money |
 | Goes down? | Never | Yes, when they buy something |
-| Used for | Monster levels, big reward goals, trophies, mystery eggs, the team jar | The Shop: pets, hats, outfits, house upgrades, furniture, everyday treats |
+| Used for | Monster levels, big rewards, trophies, mystery eggs, the team jar | The Shop: pets, hats, outfits, house upgrades, furniture, everyday treats |
 
 So a child who spends their Dojo $ never loses progress towards a big reward. If they ask "did I lose my points?", the answer is always no: their Dojos stay the same.
 
-Big reward goals (like a park trip with ice cream) unlock automatically at a Dojos total. A parent marks them as given once they've happened.
+Big rewards (like a park trip with ice cream) unlock automatically at a Dojos total. A parent taps ✓ Redeemed once they've happened.
 
 ## When to award a Dojo
 
@@ -56,7 +56,7 @@ Award a Dojo when you see one of the child's listed behaviours, as it happens or
 
 **Don't award Dojos**
 
-- To stop a meltdown or end an argument (that teaches that upset earns points).
+- To stop a meltdown or end an argument (that teaches that upset earns Dojos).
 - Because the child asked for one. Notice the behaviour later instead.
 - For things already paid with something else, like a treat promised for finishing dinner.
 
@@ -115,7 +115,7 @@ The garden changes with the Australian seasons and dresses up by itself for birt
 | --- | --- |
 | Give Dojos | Spend Dojo $ on real-world treats |
 | Undo their own Dojo within 15 minutes | Mark big rewards as given |
-| Buy shop items with the child's Dojo $ | Change behaviours, treats, goals and settings |
+| Buy shop items with the child's Dojo $ | Change behaviours, treats, big rewards and settings |
 | Change the monster's look, outfit and name | Invite or remove people, and back up |
 
 If a child asks for a real-world treat or reaches a big reward while you're with them, tell them a parent will sort it out, and let a parent know.

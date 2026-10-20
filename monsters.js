@@ -100,7 +100,8 @@ const SHOP = [
 const PRICE_TIERS = [[8, "quick", "Quick"], [20, "bit", "Save a bit"], [45, "up", "Save up"], [Infinity, "mega", "Mega"]];
 function priceTier(cost) { return PRICE_TIERS.find(([max]) => cost <= max); }
 const SLOTS = [["pet", "Pets"], ["hat", "Hats"], ["acc", "Accessories"], ["skin", "Skins"], ["bg", "Backgrounds"]];
-const LEVELS = [0, 25, 75, 150, 300, 500];
+// Dojos needed for each level. Levels 7 to 11 keep the monster growing long after the first few months.
+const LEVELS = [0, 25, 75, 150, 300, 500, 750, 1000, 1300, 1650, 2000];
 const COLORS = ["#2BB3A3", "#FF6F59", "#7B61FF", "#F5B700", "#4CBF5A", "#3FA7F5", "#FF7EB6", "#FF8A2A", "#E63946", "#8AC926", "#C77DFF", "#6D7A8C", "#5ED3C6", "#FF9AA2", "#9D8CFF", "#FFC75F"];
 const SHAPES = [["round", "Round"], ["tall", "Tall"], ["wide", "Wide"]];
 const TOPS = [["horns", "Horns"], ["ears", "Ears"], ["antenna", "Antennae"], ["unicorn", "Unicorn horn"], ["bunny", "Bunny ears"], ["mohawk", "Spiky hair"], ["tuft", "Hair tuft"], ["sprout", "Leaf sprout"], ["none", "None"]];
@@ -218,6 +219,7 @@ function monsterSvg(look, equip, level) {
   s += `<linearGradient id="${gid}r" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FF5E5E"/><stop offset=".25" stop-color="#FFB13B"/><stop offset=".5" stop-color="#FFE14D"/><stop offset=".75" stop-color="#58D36B"/><stop offset="1" stop-color="#4DA6FF"/></linearGradient></defs>`;
   if (equip.bg) s += bgSvg(equip.bg, gid);
   if (level >= 5) s += `<circle cx="100" cy="${mid}" r="98" fill="url(#${gid}a)"/>`;
+  if (level >= 9) s += `<circle cx="100" cy="${mid}" r="80" fill="url(#${gid}a)"/>`;
   if (level >= 4) s += `<path d="M${100 - G.rx + 10} ${mid - 10} Q${100 - G.rx - 40} ${mid - 50} ${100 - G.rx - 30} ${mid + 10} Q${100 - G.rx - 14} ${mid} ${100 - G.rx + 10} ${mid + 14}Z" fill="${light}" opacity=".9"/><path d="M${100 + G.rx - 10} ${mid - 10} Q${100 + G.rx + 40} ${mid - 50} ${100 + G.rx + 30} ${mid + 10} Q${100 + G.rx + 14} ${mid} ${100 + G.rx - 10} ${mid + 14}Z" fill="${light}" opacity=".9"/>`;
   // worn pictures: the shop picture fitted to this monster's shape
   const pic = (id, x, y, w, h, align) => `<image href="${shopArt(id)}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" preserveAspectRatio="${align || "xMidYMid"} meet"/>`;
@@ -293,6 +295,10 @@ function monsterSvg(look, equip, level) {
   else if (equip.hat) { const w = Math.min(G.rx * 1.75, 110); s += pic(equip.hat, 100 - w / 2, G.top + 20 - w * .8, w, w * .8, "xMidYMax"); }
   if (equip.pet) s += `<g transform="translate(166 172) scale(.95)">${petSvg(equip.pet)}</g>`;
   if (level >= 3) s += star(100 + G.rx + 12, G.top + 4, 8, "#FFD43B") + star(100 - G.rx - 10, G.top + 30, 6, "#FFD43B");
+  // Higher levels: a third star (7), a golden sparkle ring (8), a stronger glow (9) and a rainbow ring (10 and up).
+  if (level >= 7) s += star(100 + G.rx + 4, G.bot - 18, 7, "#FFD43B");
+  if (level >= 10) s += `<circle cx="100" cy="${mid}" r="94" fill="none" stroke="url(#${gid}r)" stroke-width="4" stroke-dasharray="3 9" stroke-linecap="round" opacity=".9"/>`;
+  else if (level >= 8) s += `<circle cx="100" cy="${mid}" r="94" fill="none" stroke="url(#${gid}g)" stroke-width="4" stroke-dasharray="3 9" stroke-linecap="round"/>`;
   return s + `</svg>`;
 }
 
