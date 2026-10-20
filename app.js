@@ -354,6 +354,9 @@ function whoosh(at, len, vol) {
 const SND = {
   earn: () => { whoosh(0, .35, .3); beep([[784, .5, 0], [988, .5, .08], [1175, .5, .16], [1568, 1.1, .26], [2093, .9, .34, "pluck"], [2637, .8, .42, "pluck"]], .55); },
   buy: () => { whoosh(0, .3, .25); beep([[523, .3, 0, "pluck"], [659, .3, .07, "pluck"], [784, .3, .14, "pluck"], [1047, .4, .21, "pluck"], [1568, 1, .3]], .5); },
+  // A drumroll that builds up, then a trumpet-style fanfare, for big rewards.
+  drumroll: (len) => { const n = Math.floor(len / .055); for (let p = 0; p < 3; p++) beep(Array.from({ length: Math.ceil(n / 3) }, (_, i) => [105 + ((i + p) % 2) * 9, .07, (p * Math.ceil(n / 3) + i) * .055, "pluck"]).filter((x) => x[2] < len), .3 + p * .2); whoosh(len - .5, .5, .3); },
+  fanfare: () => { whoosh(0, .8, .4); beep([[392, .18, 0], [392, .18, .16], [392, .18, .32], [523, .7, .48], [392, .2, 1.05], [523, .25, 1.25], [659, .25, 1.45], [784, 1.8, 1.65], [1047, 1.8, 1.65], [1319, 1.6, 1.65], [1568, 1.2, 1.8, "pluck"], [2093, 1, 1.95, "pluck"]], .6); },
   goal: () => { whoosh(0, .6, .35); beep([[523, .35, 0], [659, .35, .15], [784, .35, .3], [1047, .5, .45], [784, .25, .7, "pluck"], [1047, 1.6, .85], [1319, 1.4, .85], [1568, 1.4, .85], [2093, 1, 1.0, "pluck"]], .5); }
 };
 
@@ -549,9 +552,61 @@ function award(kid, b, btn) {
   else if (after.level > before.level) setTimeout(() => celebrateLevel(kid, after.level), 500);
   else if (fresh.length) setTimeout(() => celebrateBadge(kid, fresh[0]), 500);
 }
-function celebrateGoal(kid, m) {
-  SND.goal(); bigBurst(innerWidth / 2, innerHeight / 3, ["#FFD43B", "#FF5E8A", "#3D7BFF", "#4CBF5A", "#fff", kid.look.color]); setTimeout(() => bigBurst(innerWidth / 2, innerHeight / 3, ["#FFD43B", "#FF5E8A", "#3D7BFF", kid.look.color]), 700);
-  modal(`<div class="m">${monsterSvg(kid.look, wornBy(kid), stats(kid.id).level)}</div><h2>${esc(kid.name)} reached ${m.at} Dojos!</h2><p style="font-family:var(--font-display);font-size:22px;margin:0">${esc(m.icon || "🎁")} ${esc(m.label)}</p><p class="meta">You'll find this trophy in the Trophies case. A parent taps "Mark given" once they've had it.</p><button class="btn primary" data-autofocus id="ok">Hooray!</button>`, () => { $("#ok").onclick = closeModal; });
+// Reaching a big reward is the biggest moment in the app: a full-screen show with a drumroll, a gift that bursts open,
+// a fanfare, fireworks and a dancing monster. The Hooray button wakes up after a moment so a stray tap can't skip it.
+function celebrateGoal(kid, m) { rewardShow(kid, m); }
+const RSHOW = { timers: [] };
+function rewardShow(kid, m) {
+  closeRewardShow(); closeModal();
+  markShowSeen(kid.id, m.id);
+  const cols = ["#FFD43B", "#FF5E8A", "#3D7BFF", "#4CBF5A", "#C77DFF", "#fff", kid.look.color], st = stats(kid.id);
+  const el = document.createElement("div");
+  el.className = "rshow"; el.setAttribute("role", "dialog"); el.setAttribute("aria-modal", "true"); el.setAttribute("aria-label", `${kid.name} won a big reward: ${m.label}`);
+  el.style.setProperty("--kid", kid.look.color);
+  el.innerHTML = `<div class="rs-rays" aria-hidden="true"></div><div class="rs-in">
+    <div class="rs-kicker">Big reward!</div>
+    <div class="rs-gift" aria-hidden="true"><span class="rs-box">🎁</span><span class="rs-prize">${esc(m.icon || "🎁")}</span></div>
+    <h2 class="rs-name">${esc(kid.name)} did it!</h2>
+    <div class="rs-label">${esc(m.label)}</div>
+    <div class="rs-sub">${m.at} Dojos earned</div>
+    <button class="rs-m" id="rsMonster" aria-label="${esc(kid.monsterName || kid.name + "'s monster")}">${monsterSvg(kid.look, dressedFor(kid), st.level)}</button>
+    <p class="rs-note">Show a grown-up! They'll tap ✓ Redeemed once you've had it.</p>
+    <button class="btn primary rs-ok" id="rsOk" disabled>Hooray!</button></div>`;
+  document.body.appendChild(el);
+  const later = (ms, f) => RSHOW.timers.push(setTimeout(f, ms));
+  SND.drumroll(1.6);
+  later(1600, () => {
+    el.classList.add("open");
+    SND.fanfare();
+    if (navigator.vibrate) try { navigator.vibrate([80, 60, 80, 60, 300]); } catch (e) {}
+    bigBurst(innerWidth / 2, innerHeight * .3, cols);
+  });
+  // Fireworks all over the screen, with confetti falling from the top.
+  for (let i = 0; i < 12; i++) later(2100 + i * 420, () => {
+    confetti(innerWidth * (.12 + Math.random() * .76), innerHeight * (.1 + Math.random() * .35), [cols[i % cols.length], "#fff", "#FFD43B"], 45, { spread: 1.7, power: .75 });
+    whoosh(0, .25, .35); beep([[180 + Math.random() * 140, .25, .05, "pluck"]], .45);
+  });
+  for (let i = 0; i < 20; i++) later(1800 + i * 220, () => confetti(Math.random() * innerWidth, -10, cols, 8, { dir: Math.PI / 2, power: .35 }));
+  later(4600, () => SND.goal());
+  later(3000, () => { const ok = $("#rsOk", el); if (ok) { ok.disabled = false; ok.focus(); } });
+  $("#rsOk", el).onclick = closeRewardShow;
+  $("#rsMonster", el).onclick = () => { bounce($("#rsMonster svg", el), true); speak("You did it!", kid); };
+}
+function closeRewardShow() {
+  RSHOW.timers.forEach(clearTimeout); RSHOW.timers = [];
+  const el = $(".rshow"); if (el) el.remove();
+}
+// The show also plays once on each device, so a child on the tablet sees it even when a grown-up gave the Dojo on their phone.
+// The first time this runs on a device it just remembers the rewards already won, so old ones don't replay.
+function markShowSeen(kidId, mid) { const seen = lget("hd.rshow", null) || allWonRewards(), k = kidId + "|" + mid; lset("hd.rshow", (seen.includes(k) ? seen : seen.concat([k])).slice(-200)); }
+function allWonRewards() { return ((S.cfg && S.cfg.kids) || []).flatMap((k) => rewardsOf(k).map((x) => k.id + "|" + x.m.id)); }
+function maybeRewardShow(kid) {
+  if (!kidsMode() || !kid || $(".rshow")) return;
+  const won = rewardsOf(kid).filter((x) => !x.given);
+  let seen = lget("hd.rshow", null);
+  if (!seen) { lset("hd.rshow", allWonRewards()); return; }
+  const fresh = won.find((x) => !seen.includes(kid.id + "|" + x.m.id) && Date.now() - x.won < 14 * 864e5);
+  if (fresh) setTimeout(() => rewardShow(kidById(kid.id) || kid, fresh.m), 500);
 }
 function celebrateLevel(kid, lvl) {
   SND.goal(); bigBurst(innerWidth / 2, innerHeight / 3, ["#FFD43B", "#FF5E8A", kid.look.color, "#fff"]);
@@ -2852,6 +2907,7 @@ function render() {
   if (r.name !== "settings") window.scrollTo(0, y);
   const ao = $("#adminOff"); if (ao) ao.onclick = () => { S.adminPlay = false; toast("Admin mode off."); rerender(); };
   wire();
+  if (S.phase === "app" && r.name === "kid" && !lockedKid(r)) maybeRewardShow(kidById(r.kid));
 }
 function go(route) { if (route.name === "home") { S.kidOk = null; S.lockEntry = ""; } S.route = route; S.lastRoute = null; S.lastHtml = ""; render(); window.scrollTo(0, 0); }
 function rerender() { S.lastRoute = null; S.lastHtml = ""; render(); }

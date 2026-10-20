@@ -728,3 +728,43 @@ textarea.inp { min-height: 80px; resize: vertical; font: inherit; }
 .rwd .tick { width: 30px; height: 30px; border-radius: 50%; background: #4CBF5A; color: #fff; display: grid; place-items: center; font-weight: 800; }
 .rwdpill { background: #FFE1B8; color: #8A4B00; font-size: 12px; }
 .redeemhome { margin-top: 10px; }
+
+/* Big reward show: full screen, above everything but the confetti. */
+.rshow { position: fixed; inset: 0; z-index: 58; display: grid; place-items: center; padding: 16px; overflow: hidden; background: radial-gradient(circle at 50% 35%, #4B2CC9 0%, #23135F 60%, #12082F 100%); color: #fff; text-align: center; animation: rs-fade .35s ease-out; }
+.rs-rays { position: absolute; left: 50%; top: 32%; width: 220vmax; height: 220vmax; margin: -110vmax 0 0 -110vmax; background: repeating-conic-gradient(rgba(255,212,59,.16) 0 10deg, transparent 10deg 20deg); opacity: 0; transition: opacity .6s; animation: rs-spin 18s linear infinite; pointer-events: none; }
+.rshow.open .rs-rays { opacity: 1; }
+.rs-in { position: relative; display: grid; gap: 8px; justify-items: center; width: min(440px, 100%); max-height: 100%; overflow: auto; }
+.rs-kicker { font-family: var(--font-display); font-weight: 700; font-size: 20px; letter-spacing: 3px; text-transform: uppercase; color: #FFD43B; }
+.rs-gift { position: relative; width: 170px; height: 150px; display: grid; place-items: center; }
+.rs-box, .rs-prize { position: absolute; font-size: 120px; line-height: 1; }
+.rs-box { animation: rs-shake .5s ease-in-out infinite; }
+.rs-prize { transform: scale(0); opacity: 0; filter: drop-shadow(0 0 24px rgba(255,212,59,.9)); }
+.rshow.open .rs-box { animation: rs-pop .45s ease-in forwards; }
+.rshow.open .rs-prize { animation: rs-prize .9s cubic-bezier(.2,1.6,.4,1) .15s forwards, rs-float 2.4s ease-in-out 1.2s infinite; }
+.rs-name, .rs-label, .rs-sub, .rs-m, .rs-note { opacity: 0; transform: scale(.4); }
+.rshow.open .rs-name { animation: rs-slam .5s cubic-bezier(.2,1.5,.4,1) .3s forwards; }
+.rshow.open .rs-label { animation: rs-slam .5s cubic-bezier(.2,1.5,.4,1) .6s forwards; }
+.rshow.open .rs-sub, .rshow.open .rs-note { animation: rs-slam .4s ease-out .9s forwards; }
+.rshow.open .rs-m { animation: rs-slam .5s cubic-bezier(.2,1.5,.4,1) .8s forwards; }
+.rs-name { margin: 0; font-family: var(--font-display); font-size: 44px; line-height: 1.05; color: #fff; -webkit-text-stroke: 2px var(--kid); paint-order: stroke fill; text-shadow: 0 4px 0 rgba(0,0,0,.25); }
+.rs-label { font-family: var(--font-display); font-weight: 700; font-size: 26px; line-height: 1.15; background: linear-gradient(#FFE27A, #FFB400); color: #3A2400; padding: 8px 18px; border-radius: 18px; box-shadow: 0 6px 0 #C47F00, 0 0 30px rgba(255,212,59,.6); }
+.rs-sub { font-size: 16px; color: #E6DDFF; }
+.rs-m { width: 150px; height: 150px; padding: 0; border: 0; background: none; cursor: pointer; }
+.rs-m svg { width: 100%; height: 100%; }
+.rshow.open .rs-m svg { animation: rs-dance .8s ease-in-out 1.4s infinite; transform-origin: 50% 90%; }
+.rs-note { margin: 0; font-size: 15px; color: #E6DDFF; }
+.rs-ok { min-width: 200px; font-size: 22px; }
+.rs-ok:disabled { opacity: .35; }
+@keyframes rs-fade { from { opacity: 0; } }
+@keyframes rs-spin { to { transform: rotate(360deg); } }
+@keyframes rs-shake { 0%, 100% { transform: rotate(0) scale(1); } 25% { transform: rotate(-9deg) scale(1.05); } 75% { transform: rotate(9deg) scale(1.05); } }
+@keyframes rs-pop { to { transform: scale(1.8); opacity: 0; } }
+@keyframes rs-prize { from { transform: scale(0) rotate(-200deg); opacity: 0; } to { transform: scale(1) rotate(0); opacity: 1; } }
+@keyframes rs-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+@keyframes rs-slam { to { opacity: 1; transform: scale(1); } }
+@keyframes rs-dance { 0%, 100% { transform: translateY(0) rotate(0); } 25% { transform: translateY(-22px) rotate(-8deg); } 50% { transform: translateY(0) scale(1.06, .94); } 75% { transform: translateY(-22px) rotate(8deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .rshow, .rs-rays, .rs-box, .rshow.open .rs-prize, .rshow.open .rs-m svg { animation: none; }
+  .rshow.open .rs-box { animation: none; opacity: 0; }
+  .rshow.open .rs-prize, .rshow.open .rs-name, .rshow.open .rs-label, .rshow.open .rs-sub, .rshow.open .rs-m, .rshow.open .rs-note { animation: none; opacity: 1; transform: none; }
+}
