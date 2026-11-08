@@ -1,25 +1,60 @@
-# Builds voice.js: short recorded lines in a bright, happy, kid-friendly voice, played through Web Audio.
+# Builds voice.js: short recorded lines in a warm, natural, kid-friendly voice, played through Web Audio.
 # Phones and in-app browsers often have no built-in speech, so the app uses these clips first.
-# Needs: pip install piper-tts, ffmpeg, and a Piper voice model. Used: en-us-libritts-high (CC BY 4.0), speaker 780,
-# a quick, lively voice, from github.com/rhasspy/piper releases v0.0.2 (voice-en-us-libritts-high.tar.gz).
-# Usage: python3 tools/build-voice.py /path/to/en-us-libritts-high.onnx [speaker]
-import base64, json, os, re, subprocess, sys, tempfile
+# Voice: Google Gemini text-to-speech (model gemini-3.8-flash-tts, voice "Leda"), made once here; the app never calls Gemini.
+# Needs: ffmpeg, and network access to generativelanguage.googleapis.com with an API key in GEMINI_API_KEY
+# (or a proxy that adds the x-goog-api-key header).
+# Usage: python3 tools/build-voice.py [cache dir]   (clips already in the cache dir are reused, so reruns only make new lines)
+# The free daily limit is about 100 requests per model; set TTS_MODEL=gemini-3.1-flash-tts-preview to use another model meanwhile.
+import base64, json, os, re, subprocess, sys, time, urllib.error, urllib.request
 A = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + '/'
-model = sys.argv[1]
-speaker = sys.argv[2] if len(sys.argv) > 2 else '780'
+CACHE = sys.argv[1] if len(sys.argv) > 1 else A + 'tools/.voice-cache'
+MODEL, VOICE = os.environ.get('TTS_MODEL', 'gemini-3.8-flash-tts'), 'Leda'
+# The style goes in the prompt as director's notes; only the transcript is read aloud.
+STYLE = """# AUDIO PROFILE: Mo the friendly monster
+A cuddly, playful cartoon monster who is best friends with a young child.
+### DIRECTOR'S NOTES
+Style: warm, bright, smiley and genuinely excited, like a fun kids' TV character. Natural and expressive, never robotic.
+Pace: lively but clear, easy for a little child to follow.
+Only read the transcript aloud."""
+# Trim silence at both ends only (reverse trick, so pauses inside a sentence stay), then even out loudness.
+AF = ('silenceremove=start_periods=1:start_threshold=-50dB,areverse,silenceremove=start_periods=1:start_threshold=-50dB,areverse,'
+      'apad=pad_dur=0.05,loudnorm=I=-16:TP=-1.5,aresample=24000,alimiter=limit=0.9')
 key = lambda t: re.sub(r'\s+', ' ', re.sub(r"[^a-z ]", '', t.lower())).strip()
 lines = [l.strip() for l in open(A + 'tools/voice-lines.txt') if l.strip() and not l.startswith('#')]
+
+def gemini(text):
+    body = {"contents": [{"parts": [{"text": f"{STYLE}\n\n#### TRANSCRIPT\n{text}"}]}],
+            "generationConfig": {"responseModalities": ["AUDIO"], "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": VOICE}}}}}
+    req = urllib.request.Request(f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent", data=json.dumps(body).encode(),
+                                 headers={"Content-Type": "application/json", "x-goog-api-key": os.environ.get('GEMINI_API_KEY', 'proxy')})
+    r = json.load(urllib.request.urlopen(req, timeout=120))
+    d = r["candidates"][0]["content"]["parts"][0]["inlineData"]
+    # Some models send a WAV file, others raw 16-bit PCM ("audio/L16;codec=pcm;rate=24000").
+    rate = re.search(r'rate=(\d+)', d.get("mimeType", ""))
+    return base64.b64decode(d["data"]), ([] if 'wav' in d.get("mimeType", "") else ['-f', 's16le', '-ar', rate.group(1) if rate else '24000', '-ac', '1'])
+
+def duration(path):
+    return float(subprocess.check_output(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', path]))
+
+os.makedirs(CACHE, exist_ok=True)
 out = {}
-with tempfile.TemporaryDirectory() as d:
-    for i, line in enumerate(lines):
-        wav, mp3 = f'{d}/{i}.wav', f'{d}/{i}.mp3'
-        subprocess.run([sys.executable, '-m', 'piper', '-m', model, '-f', wav, '--length-scale', '0.95', '--noise-scale', '0.75', '-s', speaker], input=line.encode(), check=True, capture_output=True)
-        # Lift the pitch a little (keeping the speed) and add sparkle so it sounds bright and cheerful, then trim silence.
-        af = ('asetrate=22050*1.08,aresample=22050,atempo=0.926,bass=g=-3:f=120,treble=g=3:f=3500,'
-              'silenceremove=start_periods=1:start_threshold=-45dB:stop_periods=1:stop_threshold=-45dB:stop_duration=0.15,'
-              'acompressor=threshold=-18dB:ratio=3,loudnorm=I=-16:TP=-1.5,aresample=22050,alimiter=limit=0.9')
-        subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', '-i', wav, '-af', af, '-ac', '1', '-ar', '22050', '-b:a', '40k', mp3], check=True)
-        out[key(line)] = base64.b64encode(open(mp3, 'rb').read()).decode()
+for line in lines:
+    mp3 = f'{CACHE}/{key(line).replace(" ", "-")}.mp3'
+    # Short laughs sometimes come back as long rambles, so a clip much longer than its words is made again.
+    limit = 1.5 + 0.6 * len(line.split())
+    tries = 0
+    while not os.path.exists(mp3):
+        tries += 1
+        try:
+            wav, fmt = gemini(line)
+        except urllib.error.HTTPError as e:
+            if tries > 8: raise
+            time.sleep(10 * tries) if e.code == 429 else time.sleep(3); continue
+        subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', *fmt, '-i', '-', '-af', AF, '-ac', '1', '-b:a', '48k', mp3], input=wav, check=True)
+        if duration(mp3) > limit and tries < 6:
+            print('  too long, again:', line); os.remove(mp3)
+    print(f'{duration(mp3):5.2f}s  {line}')
+    out[key(line)] = base64.b64encode(open(mp3, 'rb').read()).decode()
 js = '// Generated by tools/build-voice.py from tools/voice-lines.txt. Monster voice clips (MP3, base64).\nwindow.HD_VOICE = ' + json.dumps(out, separators=(',', ':')) + ';\n'
 open(A + 'voice.js', 'w').write(js)
 print(len(out), 'clips', len(js), 'bytes')
