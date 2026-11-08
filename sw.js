@@ -1,6 +1,6 @@
 // Home Dojo service worker: keeps the app working offline and picks up new versions.
 // Bump VERSION whenever any app file changes.
-const VERSION = "home-dojo-v43";
+const VERSION = "home-dojo-v44";
 // Pictures change rarely and are big, so they live in their own cache that survives app updates.
 const ART = "home-dojo-art";
 const SHELL = [

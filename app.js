@@ -1136,7 +1136,7 @@ function streakChip(kidId) {
 // robots flat with beeps, pets squeaky. A short growl or beep plays first, then the words.
 // pitch/rate are for the browser's own speech; play is the playback speed of the recorded clips (voice.js).
 // Bright, happy voices: monsters a touch higher than the recording, dragons only a little lower, pets squeaky.
-const VOICE = { monster: { pitch: 1.35, rate: 1.05, play: 1.06, lead: 260 }, dragon: { pitch: 1.05, rate: 1, play: .97, lead: 300 }, robot: { pitch: 1.2, rate: 1, play: 1.04, lead: 280 }, pet: { pitch: 2, rate: 1.25, play: 1.4, lead: 0 }, narrator: { pitch: 1.2, rate: 1.05, play: 1.02, lead: 0 } };
+const VOICE = { monster: { pitch: 1.35, rate: 1.05, play: 1.03, lead: 260 }, dragon: { pitch: 1.05, rate: 1, play: .95, lead: 300 }, robot: { pitch: 1.2, rate: 1, play: 1.01, lead: 280 }, pet: { pitch: 2, rate: 1.25, play: 1.3, lead: 0 }, narrator: { pitch: 1.2, rate: 1.05, play: 1, lead: 0 } };
 function voiceOf(who) {
   if (!who) return Object.assign({ kind: "narrator" }, VOICE.narrator);
   if (who === "pet") return Object.assign({ kind: "pet" }, VOICE.pet);
@@ -1144,7 +1144,8 @@ function voiceOf(who) {
   // Shape and colour nudge the pitch so each child's monster sounds a bit different.
   const hue = [...String(look.color || "")].reduce((a, c) => a + c.charCodeAt(0), 0) % 5;
   v.pitch = Math.max(0, Math.min(2, v.pitch + ({ round: .1, tall: 0, wide: -.1 }[look.shape] || 0) + (hue - 2) * .05));
-  v.play += ({ round: .04, tall: 0, wide: -.04 }[look.shape] || 0) + (hue - 2) * .025;
+  // Clip speed changes stay small so the recorded voice keeps sounding natural.
+  v.play += ({ round: .025, tall: 0, wide: -.025 }[look.shape] || 0) + (hue - 2) * .012;
   return v;
 }
 let ttsVoice = null;
@@ -1198,9 +1199,9 @@ function playClip(k, v, delay) {
     const ac = audio(), t = ac.currentTime + (delay || 0), src = ac.createBufferSource(), out = ac.createGain();
     src.buffer = buf; src.playbackRate.value = Math.max(.6, Math.min(1.8, v.play)); out.gain.value = 1.5;
     if (v.kind === "robot") {
-      // Ring modulation: the classic robot sound, mixed with some of the plain voice so the words stay clear.
-      const rm = ac.createGain(), osc = ac.createOscillator(), dry = ac.createGain(); rm.gain.value = 0; dry.gain.value = .7; osc.frequency.value = 90;
-      osc.connect(rm.gain); src.connect(rm); src.connect(dry); rm.connect(out); dry.connect(out); osc.start(t); osc.stop(t + buf.duration / src.playbackRate.value + .1);
+      // Ring modulation for robots, kept light: mostly the plain voice, with a little robot buzz on top.
+      const rm = ac.createGain(), osc = ac.createOscillator(), dry = ac.createGain(), wet = ac.createGain(); rm.gain.value = 0; dry.gain.value = .85; wet.gain.value = .35; osc.frequency.value = 90;
+      osc.connect(rm.gain); src.connect(rm); src.connect(dry); rm.connect(wet); wet.connect(out); dry.connect(out); osc.start(t); osc.stop(t + buf.duration / src.playbackRate.value + .1);
     } else if (v.kind === "dragon") { const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 4200; src.connect(lp); lp.connect(out); }
     else src.connect(out);
     out.connect(master); src.start(t); me.src = src;
